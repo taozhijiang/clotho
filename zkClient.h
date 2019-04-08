@@ -17,27 +17,27 @@
 
 // type forward
 struct _zhandle;
+struct zoo_op;
+struct zoo_op_result;
+
 struct Stat;
 struct ACL_vector;
 
 namespace tzkeeper {
 
+typedef std::function<int(int,int,const char*)> BizEventFunc;
+
 class zkClient {
 
 public:
-    zkClient(const std::string& hostline, const std::string& idc, int session_timeout = 10 * 1000):
-        hostline_(hostline),
-        idc_(idc),
-        session_timeout_(session_timeout),
-        zhandle_lock_(),
-        zhandle_(NULL) {
-    }
+    zkClient(const std::string& hostline, const BizEventFunc& func = BizEventFunc(), 
+             const std::string& idc = "default", int session_timeout = 10*1000);
+    ~zkClient();
 
-    ~zkClient() {
-    }
-
-
-    int zk_init();
+    // 该函数是可重复调用的，当会话断开的时候使用这个来重建会话
+    bool zk_init();
+    int handle_session_event(int type, int state, const char *path);
+    int delegete_biz_event(int type, int state, const char *path);
 
     int zk_create(const char* path, const std::string& value, const struct ACL_vector *acl, int flags);
     int zk_delete(const char* path, int version = -1);
@@ -48,6 +48,7 @@ public:
     int zk_exists(const char* path, int watch, struct Stat *stat);
     int zk_get_children(const char* path, int watch, std::vector<std::string>& children);
 
+    int zk_multi(int op_count, const struct zoo_op *ops, struct zoo_op_result *results);
 
 private:
 
@@ -56,6 +57,8 @@ private:
     std::vector<std::string>  hosts_;
     std::string               idc_;
     int                       session_timeout_;
+    
+    std::function<int(int,int,const char*)> biz_event_func_;
 
     // internal handle and sync
     std::mutex                zhandle_lock_;

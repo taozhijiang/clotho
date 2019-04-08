@@ -2,7 +2,9 @@
 #define __ZK_PATH_H__
 
 #include <string>
+#include <cstring>
 #include <vector>
+#include <limits>
 
 #include <sys/types.h>
 #include <ifaddrs.h>
@@ -87,7 +89,7 @@ public:
 
     // 优化路径名字，包括：删除空白字符，删除中间连续的以及末尾的 '/'
     static std::string normalize_path(const std::string& str) {
-        
+
         std::string copy_str = str;
         size_t index = 0;
 
