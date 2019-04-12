@@ -6,7 +6,7 @@
 #include "zkPath.h"
 
 using namespace ::testing;
-using namespace tzkeeper;
+using namespace Clotho;
 
 TEST(zkPathTest, PathTest) {
 

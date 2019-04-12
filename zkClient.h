@@ -1,5 +1,5 @@
-#ifndef __ZK_CLIENT_H__
-#define __ZK_CLIENT_H__
+#ifndef __CLOTHO_CLIENT_H__
+#define __CLOTHO_CLIENT_H__
 
 #include <string>
 #include <vector>
@@ -23,7 +23,7 @@ struct zoo_op_result;
 struct Stat;
 struct ACL_vector;
 
-namespace tzkeeper {
+namespace Clotho {
 
 typedef std::function<int(int,int,const char*)> BizEventFunc;
 
@@ -65,7 +65,7 @@ private:
     struct _zhandle*          zhandle_;
 };
 
-} // end namespace tzkeeper
+} // end namespace Clotho
 
-#endif // __ZK_CLIENT_H__
+#endif // __CLOTHO_CLIENT_H__
 

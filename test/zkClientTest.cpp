@@ -7,7 +7,7 @@
 #include "zkClient.h"
 
 using namespace ::testing;
-using namespace tzkeeper;
+using namespace Clotho;
 
 TEST(zkClientTest, PathTest) {
 

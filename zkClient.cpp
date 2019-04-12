@@ -15,7 +15,7 @@
 } while(false);
 
 
-namespace tzkeeper {
+namespace Clotho {
 
 const static int ZOO_BUFFER_LEN = 4 * 1024;
 
@@ -316,4 +316,4 @@ int zkClient::zk_multi(int op_count, const zoo_op_t *ops, zoo_op_result_t *resul
     return 0;
 }
 
-} // end namespace tzkeeper
+} // Clotho

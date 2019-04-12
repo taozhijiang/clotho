@@ -1,5 +1,5 @@
-#ifndef __ZK_PATH_H__
-#define __ZK_PATH_H__
+#ifndef __CLOTHO_PATH_H__
+#define __CLOTHO_PATH_H__
 
 #include <string>
 #include <cstring>
@@ -11,7 +11,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-namespace tzkeeper {
+namespace Clotho {
 
 // 约定的服务组织模式： /department/service/node
 class zkPath {
@@ -208,7 +208,7 @@ public:
     }
 };
 
-} // end namespace tzkeeper
+} // Clotho
 
-#endif // __ZK_PATH_H__
+#endif // __Clotho_PATH_H__
 
