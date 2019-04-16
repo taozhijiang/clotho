@@ -24,7 +24,10 @@ else(BUILD_DEBUG)
     message(STATUS "${Red}build_type RelWithDebInfo flag: ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}${ColourReset}")
 endif(BUILD_DEBUG)
 
-include_directories( ../xtra_rhelz.x/include )
+include_directories( 
+    ../xtra_rhelz.x/include
+    ../xtra_rhelz.x/include/google
+)
 
 aux_source_directory(. DIR_LIB_SRCS)
 add_library (Clotho STATIC ${DIR_LIB_SRCS})

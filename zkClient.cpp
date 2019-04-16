@@ -157,6 +157,7 @@ bool zkClient::zk_init() {
             return false;
         }
 
+        // 同步等待，直到连接完成
         while(zoo_state(zhandle_) != ZOO_CONNECTED_STATE) {
             log_debug("wait zookeeper to be connectted. %d:%s", zoo_state(zhandle_), zstate_str(zoo_state(zhandle_)));
             ::usleep(50 * 1000);
@@ -229,11 +230,14 @@ int zkClient::zk_exists(const char* path, int watch, struct Stat *stat) {
 
     int ret = zoo_exists(zhandle_, path, watch, stat);
     if(ret < 0) {
+        if (ret == ZNONODE) // 不存在
+            return 0;
+
         log_err("zoo_exists %s failed, ret: %s", path, zerror(ret));
         return ret;
     }
 
-    return 0;
+    return 1; // 存在
 }
 
 
@@ -248,6 +252,11 @@ int zkClient::zk_create(const char* path, const std::string& value, const struct
 
     int ret = zoo_create(zhandle_, path, value.c_str(), value.size(), acl, flags, NULL, 0);
     if(ret < 0) {
+        // if node already exists, update the value
+        if (ret ==  ZNODEEXISTS) {
+            return zk_set(path, value);
+        }
+
         log_err("zoo_create %s failed, ret: %s", path, zerror(ret));
         return ret;
     }

@@ -19,6 +19,27 @@ enum PickServiceStrategy: uint8_t {
     kByMaster = 4,
 };
 
+struct NodeType {
+
+    std::string department_;
+    std::string service_;
+    std::string node_;
+
+    std::string host_;
+    uint16_t    port_;
+
+    std::map<std::string, std::string> properties_;
+};
+
+
+struct ServiceType {
+
+    std::string department_;
+    std::string service_;
+
+    std::map<std::string, std::string> properties_;
+};
+
 class zkFrame {
 
 public:
@@ -27,24 +48,21 @@ public:
 
     bool init(const std::string& hostline, const std::string& idc);
 
-    int set_priority(int val);
-    int adj_priority(int priority_step);  // + - 增加减少
-
-    int set_weight(int val);
-    int adj_weight(int weight_step);
-
     // upload our service instance
-    int pub_service(const std::string& department, const std::string& service);
+    int publish_node(const NodeType& node);
+    int revoke_node(const std::string& node_path);
 
     // watch specific service
-    int sub_service(const std::string& department, const std::string& service);
-    int pick_service_node();
+    int subscribe_service(const std::string& department, const std::string& service);
+
+    // 特定的服务选择算法实现
+    int pick_service_node(NodeType& node);
 
 private:
     std::unique_ptr<zkClient> client_;
 
-    // 记录本地需要注册的服务信息
-//    std::map<std::string> publish_services_;
+    // 记录本地需要注册发布的服务信息
+//    std::map<std::string> published_nodes_;
 
     // 记录本地需要订阅的服务信息
 //    std::map<std::string> subscribe_services_;

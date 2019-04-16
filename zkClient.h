@@ -45,6 +45,7 @@ public:
     int zk_set(const char* path, const std::string& value, int version = -1);
     int zk_get(const char* path, std::string& value, int watch, struct Stat* stat);
 
+    // 1 存在，0不存在，其他请求失败
     int zk_exists(const char* path, int watch, struct Stat *stat);
     int zk_get_children(const char* path, int watch, std::vector<std::string>& children);
 
