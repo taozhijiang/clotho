@@ -25,31 +25,35 @@ struct ACL_vector;
 
 namespace Clotho {
 
-typedef std::function<int(int,int,const char*)> BizEventFunc;
+typedef std::function<int(int, int, const char*)> BizEventFunc;
 
 class zkClient {
 
 public:
-    zkClient(const std::string& hostline, const BizEventFunc& func = BizEventFunc(), 
-             const std::string& idc = "default", int session_timeout = 10*1000);
+    zkClient(const std::string& hostline, const BizEventFunc& func = BizEventFunc(),
+             const std::string& idc = "default", int session_timeout = 10 * 1000);
     ~zkClient();
+
+    zkClient(const zkClient&) = delete;
+    zkClient& operator=(const zkClient&) = delete;
+
 
     // 该函数是可重复调用的，当会话断开的时候使用这个来重建会话
     bool zk_init();
-    int handle_session_event(int type, int state, const char *path);
-    int delegete_biz_event(int type, int state, const char *path);
+    int handle_session_event(int type, int state, const char* path);
+    int delegete_biz_event(int type, int state, const char* path);
 
-    int zk_create(const char* path, const std::string& value, const struct ACL_vector *acl, int flags);
+    int zk_create(const char* path, const std::string& value, const struct ACL_vector* acl, int flags);
     int zk_delete(const char* path, int version = -1);
 
     int zk_set(const char* path, const std::string& value, int version = -1);
     int zk_get(const char* path, std::string& value, int watch, struct Stat* stat);
 
     // 1 存在，0不存在，其他请求失败
-    int zk_exists(const char* path, int watch, struct Stat *stat);
+    int zk_exists(const char* path, int watch, struct Stat* stat);
     int zk_get_children(const char* path, int watch, std::vector<std::string>& children);
 
-    int zk_multi(int op_count, const struct zoo_op *ops, struct zoo_op_result *results);
+    int zk_multi(int op_count, const struct zoo_op* ops, struct zoo_op_result* results);
 
 private:
 
@@ -58,8 +62,8 @@ private:
     std::vector<std::string>  hosts_;
     std::string               idc_;
     int                       session_timeout_;
-    
-    std::function<int(int,int,const char*)> biz_event_func_;
+
+    std::function<int(int, int, const char*)> biz_event_func_;
 
     // internal handle and sync
     std::mutex                zhandle_lock_;

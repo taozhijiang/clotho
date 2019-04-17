@@ -9,7 +9,7 @@
 using namespace ::testing;
 using namespace Clotho;
 
-TEST(zkClientTest, PathTest) {
+TEST(zkClientTest, ClientInitTest) {
 
     auto client = std::make_shared<zkClient>("127.0.0.1:2181,127.0.0.1:2182,127.0.0.1:2183");
     bool client_ok = client;

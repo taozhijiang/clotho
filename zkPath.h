@@ -18,7 +18,6 @@ enum class PathType : uint8_t {
 
     kService        = 2,
     kServiceProperty = 3,
-    kServiceMaster  = 4,
 
     kNode           = 10,
     kNodeProperty   = 11,
@@ -41,7 +40,7 @@ public:
     static enum PathType guess_path_type(const std::string& path);
 
     // 空白的元素不会添加到vec结果中去
-    static void split(const std::string& str, 
+    static void split(const std::string& str,
                       const std::string& needle, std::vector<std::string>& vec);
 
     // 优化路径名字，包括：删除空白字符，删除中间连续的以及末尾的 '/'

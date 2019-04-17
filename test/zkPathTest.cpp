@@ -38,7 +38,7 @@ TEST(zkPathTest, PathTypeTest) {
     ASSERT_THAT(zkPath::guess_path_type("//prjjl"), Eq(PathType::kDepartment));
 
     ASSERT_THAT(zkPath::guess_path_type("//prjjl/sss"), Eq(PathType::kService));
-    ASSERT_THAT(zkPath::guess_path_type("//prjjl/sss/master_node"), Eq(PathType::kServiceMaster));
+    ASSERT_THAT(zkPath::guess_path_type("//prjjl/sss/master_node"), Eq(PathType::kServiceProperty));
     ASSERT_THAT(zkPath::guess_path_type("//prjjl/sss/Master"), Eq(PathType::kServiceProperty));
 
     ASSERT_THAT(zkPath::guess_path_type("//prjjl/sss/172.20.11.11:100"), Eq(PathType::kNode));
