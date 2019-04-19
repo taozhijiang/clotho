@@ -7,12 +7,6 @@
 #include <memory>
 #include <mutex>
 
-// replace with Log.h latter
-#include <cstdio>
-#define log_debug(fmt, ...) ::printf("DEBUG [%s:%d(%s)]" fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
-#define log_info(fmt, ...)  ::printf("TRACE [%s:%d(%s)]" fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
-#define log_err(fmt, ...)   ::printf("ERROR [%s:%d(%s)]" fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
-
 // 使用ZooKeeper客户端库和ZooKeeper Server通信的封装
 
 // type forward
@@ -43,7 +37,10 @@ public:
     int handle_session_event(int type, int state, const char* path);
     int delegete_biz_event(int type, int state, const char* path);
 
+    int zk_create_if_nonexists(const char* path, const std::string& value, const struct ACL_vector* acl, int flags);
+    int zk_create_or_update(const char* path, const std::string& value, const struct ACL_vector* acl, int flags);
     int zk_create(const char* path, const std::string& value, const struct ACL_vector* acl, int flags);
+
     int zk_delete(const char* path, int version = -1);
 
     int zk_set(const char* path, const std::string& value, int version = -1);

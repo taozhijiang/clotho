@@ -264,6 +264,22 @@ int zkClient::zk_create(const char* path, const std::string& value, const struct
     return 0;
 }
 
+int zkClient::zk_create_if_nonexists(const char* path, const std::string& value, const struct ACL_vector* acl, int flags) {
+    int ret = zk_create(path, value, acl, flags);
+    if (ret == ZNODEEXISTS)
+        return 0;
+
+    return ret;
+}
+
+int zkClient::zk_create_or_update(const char* path, const std::string& value, const struct ACL_vector* acl, int flags) {
+    int ret = zk_create(path, value, acl, flags);
+    if (ret == ZNODEEXISTS)
+        return zk_set(path, value);
+
+    return ret;
+}
+
 int zkClient::zk_delete(const char* path, int version) {
 
     std::lock_guard<std::mutex> lock(zhandle_lock_);

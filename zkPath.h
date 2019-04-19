@@ -5,8 +5,17 @@
 #include <cstring>
 #include <vector>
 #include <limits>
+#include <sstream>
 
 #include <gtest/gtest_prod.h>
+
+
+// replace with Log.h latter
+#include <cstdio>
+#define log_debug(fmt, ...) ::printf("DEBUG [%s:%d(%s)]" fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#define log_info(fmt, ...)  ::printf("TRACE [%s:%d(%s)]" fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+#define log_err(fmt, ...)   ::printf("ERROR [%s:%d(%s)]" fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+
 
 namespace Clotho {
 
@@ -28,7 +37,7 @@ enum class PathType : uint8_t {
 
 class zkPath {
 
-    FRIEND_TEST(zkPathTest, PathPureAndValidateTest);
+    FRIEND_TEST(zkPathTest, ClientRegisterTest);
 
 public:
 
@@ -43,6 +52,18 @@ public:
     static void split(const std::string& str,
                       const std::string& needle, std::vector<std::string>& vec);
 
+    static std::string make_path(const std::string& d, const std::string& s) {
+        return "/" + d + "/" + s;
+    }
+    
+    static std::string make_path(const std::string& d, const std::string& s, const std::string& n) {
+        return "/" + d + "/" + s + "/" + n;
+    }
+
+    static std::string extend_property(const std::string& pf, const std::string& p) {
+        return pf + "/" + p;
+    }
+
     // 优化路径名字，包括：删除空白字符，删除中间连续的以及末尾的 '/'
     static std::string normalize_path(const std::string& str);
 
@@ -52,6 +73,13 @@ public:
     // ip:port node_name strict
     static bool validate_node(const std::string& node_name, std::string& ip, uint16_t& port);
 };
+
+template <typename T>
+std::string to_string(const T& t) {
+    std::stringstream ss;
+    ss << t;
+    return ss.str();
+}
 
 } // Clotho
 

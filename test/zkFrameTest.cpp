@@ -14,27 +14,26 @@ class FrameTest : public ::testing::Test {
 protected:
 
     void SetUp() {
-
         bool ret =  client_.init("127.0.0.1:2181,127.0.0.1:2182", "aliyun");
         ASSERT_THAT(ret, Eq(true));
     }
 
     void TearDown() {
-
     }
 
 public:
-
     zkFrame client_;
 };
 
 TEST_F(FrameTest, ClientRegisterTest) {
 
     std::map<std::string, std::string> properties = {
-            { "active", "1" },
+            {"ppa", "ppa_val"},
         };
 
     NodeType node("depart_a", "serv_a", "0.0.0.0:1222", properties);
+    ASSERT_THAT(client_.register_node(node, false), 0);
 
-    ASSERT_THAT(client_.register_node(node), 0);
 }
+
+
