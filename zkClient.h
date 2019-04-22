@@ -31,6 +31,9 @@ public:
     zkClient(const zkClient&) = delete;
     zkClient& operator=(const zkClient&) = delete;
 
+    static const char* zevent_str(int event);
+    static const char* zstate_str(int state);
+
 
     // 该函数是可重复调用的，当会话断开的时候使用这个来重建会话
     bool zk_init();

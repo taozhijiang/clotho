@@ -16,7 +16,7 @@ namespace Clotho {
 #define kStrategyIdc      (0x1u<<0)
 #define kStrategyPriority (0x1u<<1)
 #define kStrategyWeight   (0x1u<<2)
-#define kStrategyDefault  (kStrategyIdc|kStrategyPriority|kStrategyWeight)
+#define kStrategyDefault  (kStrategyPriority|kStrategyWeight)
 
 #define kStrategyRandom   (0x1u<<10)
 #define kStrategyRound    (0x1u<<11)
@@ -32,7 +32,7 @@ class NodeType {
 public:
 
     NodeType(const std::string& department, const std::string& service, const std::string& node,
-             const std::map<std::string, std::string>& properties) :
+             const std::map<std::string, std::string>& properties = std::map<std::string, std::string>() ) :
         department_(department), service_(service), node_(node),
         host_(), port_(0),
         active_(false), enabled_(true),
@@ -42,9 +42,9 @@ public:
         properties_(properties) {
     }
 
-    // 容器使用
-    NodeType() {
-    }
+    // 供标准容器使用，需要支持默认构造
+    NodeType() = default;
+    ~NodeType() = default;
 
     bool available() {
         return active_ && enabled_;
@@ -53,6 +53,10 @@ public:
     // TODO operator <<
     std::string str() const;
     bool prepare_path(VectorPair& paths);
+
+    static bool node_parse(const char* fp, std::string& d, std::string& s, std::string& n);
+    static bool node_property_parse(const char* fp,
+                                    std::string& d, std::string& s, std::string& n, std::string& p);
 
 public:
     std::string department_;
@@ -81,32 +85,32 @@ public:
 class ServiceType {
 public:
     ServiceType(const std::string& department, const std::string& service,
-                const std::map<std::string, std::string>& properties) :
+                const std::map<std::string, std::string>& properties = std::map<std::string, std::string>()) :
         department_(department), service_(service),
-        active_(false), enabled_(true),
+        enabled_(true),
         pick_strategy_(kStrategyDefault),
         nodes_(),
         properties_(properties) {
     }
 
-    // 容器使用
-    ServiceType() {
-    }
-
-    ~ServiceType() {
-    }
+    // 供标准容器使用，需要支持默认构造
+    ServiceType() = default;
+    ~ServiceType() = default;
 
     bool available() {
-        return active_ && enabled_;
+        return enabled_;
     }
 
     std::string str() const;
+
+    static bool service_parse(const char* fp, std::string& d, std::string& s);
+    static bool service_property_parse(const char* fp,
+                                       std::string& d, std::string& s, std::string& p);
 
 public:
     std::string department_;
     std::string service_;
 
-    bool active_;    // 远程active节点的值
     bool enabled_;   // 本地是否禁用
 
     uint32_t pick_strategy_;

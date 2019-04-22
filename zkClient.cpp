@@ -19,7 +19,7 @@ namespace Clotho {
 
 const static int ZOO_BUFFER_LEN = 4 * 1024;
 
-static inline const char* zevent_str(int event) {
+const char* zkClient::zevent_str(int event) {
 
     if (event == ZOO_CREATED_EVENT) {
         return "ZOO_CREATED_EVENT";
@@ -38,7 +38,7 @@ static inline const char* zevent_str(int event) {
     }
 }
 
-static inline const char* zstate_str(int state) {
+const char* zkClient::zstate_str(int state) {
 
     if (state == ZOO_EXPIRED_SESSION_STATE) {
         return "ZOO_EXPIRED_SESSION_STATE";
@@ -121,7 +121,7 @@ static void
 zkClient_watch_call(zhandle_t* zh, int type, int state, const char* path, void* watcher_ctx) {
 
     log_debug("event type %s, state %s, path %s",
-              zevent_str(type), zstate_str(state), path);
+              zkClient::zevent_str(type), zkClient::zstate_str(state), path);
 
     zkClient* zk = static_cast<zkClient*>(watcher_ctx);
     if (zk) {

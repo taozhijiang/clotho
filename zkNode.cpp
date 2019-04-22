@@ -6,7 +6,8 @@ namespace Clotho {
 std::string NodeType::str() const {
     std::stringstream ss;
 
-    ss << "node info => "
+    ss  << std::endl
+        << "node info => "
         << "fullpath: " << department_ <<", "<< service_ <<", "<< node_ << std::endl
         << "host&port: " << host_ <<", " << port_ << std::endl
         << "active: " << (active_ ? "on" : "off") << std::endl
@@ -15,7 +16,7 @@ std::string NodeType::str() const {
         << "priority: " << priority_ << std::endl
         << "weight: " << weight_ << std::endl;
 
-    ss << "priorities: " << std::endl;
+    ss << "properties: " << std::endl;
     for (auto iter=properties_.begin(); iter!=properties_.end(); ++iter) {
         ss << "\t" << iter->first << " - " << iter->second << std::endl;
     }
@@ -48,14 +49,14 @@ bool NodeType::prepare_path(VectorPair& paths) {
 
         if (iter->first == "weight") {
             int weight = ::atoi(iter->second.c_str());
-            if (weight >= 0 && weight <= std::numeric_limits<uint8_t>::max())
+            if (weight >= kWPMin && weight <= kWPMax)
                 weight_ = weight;
             continue;
         }
 
         if (iter->first == "priority") {
             int priority = ::atoi(iter->second.c_str());
-            if (priority >= 0 && priority <= std::numeric_limits<uint8_t>::max())
+            if (priority >= kWPMin && priority <= kWPMax)
                 priority_ = priority;
             continue;
         }
@@ -69,10 +70,41 @@ bool NodeType::prepare_path(VectorPair& paths) {
                        (zkPath::extend_property(node_path, "idc"), idc_));
 
     paths.emplace_back(std::pair<std::string, std::string>
-                       (zkPath::extend_property(node_path, "weight"),   to_string(weight_)));
+                       (zkPath::extend_property(node_path, "weight"),   Clotho::to_string(weight_)));
     paths.emplace_back(std::pair<std::string, std::string>
-                       (zkPath::extend_property(node_path, "priority"), to_string(priority_)));
+                       (zkPath::extend_property(node_path, "priority"), Clotho::to_string(priority_)));
 
+    return true;
+}
+
+bool NodeType::node_parse(const char* fp, std::string& d, std::string& s, std::string& n) {
+
+    auto pt = zkPath::guess_path_type(fp);
+    if(pt != PathType::kNode)
+        return false;
+
+    std::vector<std::string> vec;
+    zkPath::split(fp, "/", vec);
+    if(vec.size() != 3) return false;
+    if(!zkPath::validate_node(vec[2])) return false;
+
+    d = vec[0]; s = vec[1]; n = vec[2];
+    return true;
+}
+
+bool NodeType::node_property_parse(const char* fp,
+                                   std::string& d, std::string& s, std::string& n, std::string& p) {
+
+    auto pt = zkPath::guess_path_type(fp);
+    if(pt != PathType::kNodeProperty)
+        return false;
+
+    std::vector<std::string> vec;
+    zkPath::split(fp, "/", vec);
+    if(vec.size() != 4) return false;
+    if(!zkPath::validate_node(vec[2])) return false;
+
+    d = vec[0]; s = vec[1]; n = vec[2]; p = vec[3];
     return true;
 }
 
@@ -81,21 +113,56 @@ bool NodeType::prepare_path(VectorPair& paths) {
 std::string ServiceType::str() const {
     std::stringstream ss;
 
-    ss << "service info => "
+    ss << std::endl
+     << "service info => "
      << "fullpath: " << department_ <<", "<< service_ << std::endl
-     << "active: " << (active_ ? "on" : "off") << std::endl
      << "enabled: " << (enabled_ ? "on" : "off") << std::endl
      << "pick_strategy: " << pick_strategy_ << std::endl
      << "nodes count: " << nodes_.size() << std::endl;
 
-    ss << "priorities: " << std::endl;
+    ss << "properities: " << std::endl;
     for (auto iter=properties_.begin(); iter!=properties_.end(); ++iter) {
         ss << "\t" << iter->first << " - " << iter->second << std::endl;
+    }
+
+    ss << "full node list:" << std::endl;
+    for (auto iter=nodes_.begin(); iter!=nodes_.end(); ++iter) {
+        ss << "\t ~" << iter->first.c_str() << std::endl;
+        ss << "\t" << iter->second.str().c_str() << std::endl;
     }
 
     return ss.str();
 }
 
+bool ServiceType::service_parse(const char* fp, std::string& d, std::string& s) {
+
+    auto pt = zkPath::guess_path_type(fp);
+    if(pt != PathType::kService)
+        return false;
+
+    std::vector<std::string> vec;
+    zkPath::split(fp, "/", vec);
+    if(vec.size() != 2) return false;
+
+    d = vec[0]; s = vec[1];
+    return true;
+}
+
+
+bool ServiceType::service_property_parse(const char* fp,
+                                         std::string& d, std::string& s, std::string& p) {
+
+    auto pt = zkPath::guess_path_type(fp);
+    if(pt != PathType::kServiceProperty)
+        return false;
+
+    std::vector<std::string> vec;
+    zkPath::split(fp, "/", vec);
+    if(vec.size() != 3) return false;
+
+    d = vec[0]; s = vec[1]; p = vec[2];
+    return true;
+}
 
 
 } // Clotho

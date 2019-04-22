@@ -19,6 +19,7 @@ protected:
     }
 
     void TearDown() {
+        client_.revoke_all_nodes();
     }
 
 public:
@@ -34,6 +35,10 @@ TEST_F(FrameTest, ClientRegisterTest) {
     NodeType node("depart_a", "serv_a", "0.0.0.0:1222", properties);
     ASSERT_THAT(client_.register_node(node, false), 0);
 
+    // watch service
+    ASSERT_THAT(client_.subscribe_service("depart_a", "serv_a", 0), Eq(0));
+
+    ::sleep(10000);
 }
 
 

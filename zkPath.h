@@ -22,7 +22,6 @@ namespace Clotho {
 // 约定的服务组织模式： /department/service/node
 
 enum class PathType : uint8_t {
-
     kDepartment     = 1,
 
     kService        = 2,
@@ -30,7 +29,6 @@ enum class PathType : uint8_t {
 
     kNode           = 10,
     kNodeProperty   = 11,
-
 
     kUndetected     = 100,
 };
@@ -60,8 +58,8 @@ public:
         return "/" + d + "/" + s + "/" + n;
     }
 
-    static std::string extend_property(const std::string& pf, const std::string& p) {
-        return pf + "/" + p;
+    static std::string extend_property(const std::string& fp, const std::string& p) {
+        return fp + "/" + p;
     }
 
     // 优化路径名字，包括：删除空白字符，删除中间连续的以及末尾的 '/'
