@@ -1,7 +1,19 @@
 #include "zkPath.h"
+#include "zkFrame.h"
 #include "zkNode.h"
 
 namespace Clotho {
+
+NodeType::NodeType(const std::string& department, const std::string& service, const std::string& node,
+                   const std::map<std::string, std::string>& properties) :
+        department_(department), service_(service), node_(node),
+        host_(), port_(0),
+        active_(false), enabled_(true),
+        idc_(),
+        priority_(kWPDefault),
+        weight_(kWPDefault),
+        properties_(properties) {
+}
 
 std::string NodeType::str() const {
     std::stringstream ss;
@@ -9,7 +21,7 @@ std::string NodeType::str() const {
     ss  << std::endl
         << "node info => "
         << "fullpath: " << department_ <<", "<< service_ <<", "<< node_ << std::endl
-        << "host&port: " << host_ <<", " << port_ << std::endl
+        << "host & port: " << host_ <<", " << port_ << std::endl
         << "active: " << (active_ ? "on" : "off") << std::endl
         << "enabled: " << (enabled_ ? "on" : "off") << std::endl
         << "idc: " << idc_ << std::endl
@@ -110,6 +122,16 @@ bool NodeType::node_property_parse(const char* fp,
 
 
 // ServiceType
+
+ServiceType::ServiceType(const std::string& department, const std::string& service,
+                         const std::map<std::string, std::string>& properties) :
+        department_(department), service_(service),
+        enabled_(true),
+        pick_strategy_(kStrategyDefault),
+        nodes_(),
+        properties_(properties) {
+}
+
 std::string ServiceType::str() const {
     std::stringstream ss;
 

@@ -1,4 +1,5 @@
 #include <cassert>
+#include <algorithm>
 #include <zookeeper/zookeeper.h>
 
 #include "zkFrame.h"
@@ -44,8 +45,6 @@ int zkFrame::register_node(const NodeType& node, bool overwrite) {
 
     for (size_t i = 0; i < nodes.size(); ++i) {
 
-        std::cout << nodes[i].str() << std::endl;
-
         VectorPair paths {};
         if (!nodes[i].prepare_path(paths)) {
             log_err("prepare path for %s failed.", nodes[i].node_.c_str());
@@ -69,6 +68,7 @@ int zkFrame::register_node(const NodeType& node, bool overwrite) {
         }
 
         // add additional active path
+        // EPHEMERAL node here
         std::string active_path =
                 zkPath::extend_property(zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_),
                                         "active");
@@ -82,7 +82,7 @@ int zkFrame::register_node(const NodeType& node, bool overwrite) {
             std::lock_guard<std::mutex> lock(lock_);
             (*pub_nodes_)[full] = nodes[i];
 
-            log_debug("add %s into pub_nodes_, info: %s", full.c_str(), nodes[i].str().c_str());
+            log_debug("successfully add %s into pub_nodes_", full.c_str());
         }
     }
 
@@ -113,13 +113,13 @@ int zkFrame::revoke_node(const std::string& node_path) {
 
 int zkFrame::revoke_all_nodes() {
 
-    std::shared_ptr<MapNodeType> reg_nodes;
+    MapNodeType reg_nodes {};
     {
         std::lock_guard<std::mutex> lock(lock_);
-        reg_nodes = pub_nodes_;
+        reg_nodes = *pub_nodes_; // 拷贝内容
     }
 
-    for (auto iter = reg_nodes->begin(); iter != reg_nodes->end(); ++iter) {
+    for (auto iter = reg_nodes.begin(); iter != reg_nodes.end(); ++iter) {
         revoke_node(iter->first);
     }
 
@@ -227,6 +227,12 @@ int zkFrame::subscribe_node(NodeType& node) {
         log_err("get node %s failed.", node_path.c_str());
         return -1;
     }
+    node.enabled_ = (value == "1");
+
+    if (!zkPath::validate_node(node.node_, node.host_, node.port_)) {
+        log_err("validate nodename failed: %s", node.node_.c_str());
+        return -1;
+    }
 
     std::vector<std::string> sub_path {};
     int code = client_->zk_get_children(node_path.c_str(), 1, sub_path);
@@ -234,7 +240,6 @@ int zkFrame::subscribe_node(NodeType& node) {
         log_err("get service children node failed %d", code);
         return -1;
     }
-
 
     for (size_t i=0; i<sub_path.size(); ++i) {
 
@@ -312,7 +317,141 @@ int zkFrame::subscribe_node(const char* node_path) {
 
 int zkFrame::pick_service_node(const std::string& department, const std::string& service,
                                NodeType& node) {
-    return 0;
+
+    uint32_t strategy = 0;
+    std::string service_path = zkPath::make_path(department, service);
+
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        auto iter = sub_services_->find(service_path);
+        if(iter == sub_services_->end()) {
+            log_err("can not find %s in sub_service!", service_path.c_str());
+            return -1;
+        }
+
+        strategy = iter->second.pick_strategy_;
+    }
+
+    return pick_service_node(department, service, strategy, node);
+}
+
+// 降序方式排列优先级
+static inline int sort_node_by_priority(const NodeType& n1, const NodeType& n2) {
+    return (n1.priority_ > n2.priority_);
+}
+
+int zkFrame::pick_service_node(const std::string& department, const std::string& service,
+                               uint32_t strategy, NodeType& node) {
+
+    static uint32_t CHOOSE_INDEX = 0;
+
+    std::string service_path = zkPath::make_path(department, service);
+    if(zkPath::guess_path_type(service_path) != PathType::kService || strategy == 0) {
+       log_err("pick service arguments error: %s, %d", service_path.c_str(), strategy);
+       return -1;
+    }
+
+    ServiceType service_instance {};
+
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        auto iter = sub_services_->find(service_path);
+        if(iter == sub_services_->end()) {
+            log_err("can not find %s in sub_service!", service_path.c_str());
+            return -1;
+        }
+
+        // 首先拷贝，后续考虑优化，尤其对于这种读多写少的数据
+        service_instance = iter->second; // copy
+    }
+
+    std::vector<NodeType> before {};
+    std::vector<NodeType> filtered {};
+
+    // Step1. 选取所有可用节点
+    for (auto iter = service_instance.nodes_.begin();
+          iter != service_instance.nodes_.end();
+          ++ iter) {
+        if (iter->second.available())
+            before.emplace_back(iter->second);
+    }
+
+    if (before.empty()) {
+        log_err("not any available nodes for service %s with avaiable check.", service_path.c_str());
+        return -1;
+    }
+
+    // Step2. 根据IDC进行候选解点的筛选
+    filtered.clear();
+    if (strategy & kStrategyIdc) {
+        for (size_t i=0; i<before.size(); ++i) {
+            if (before[i].idc_ == idc_)
+                filtered.emplace_back(before[i]);
+        }
+
+        // 如果只得到一个可用节点，就直接返回这个节点
+        if (filtered.size() == 1) {
+            node = filtered[0];
+            return 0;
+        }
+
+        // 如果IDC筛选后可用节点为空，则取消IDC筛选条件
+        if (filtered.empty()) {
+            log_info("filtered by kStrategyIdc remains empty nodes, reset IDC strict.");
+        } else {
+            before = filtered;
+        }
+    }
+
+    // Step3. 随机选择可用节点
+    if(strategy & kStrategyRandom) {
+        uint32_t rands = static_cast<uint32_t>(::random());
+        node = before[rands % before.size()];
+        log_debug("by kStrategyRandom, return %s",
+                  zkPath::make_path(node.department_, node.service_, node.node_).c_str());
+        return 0;
+    }
+
+    // Step4. Round-Robin方式轮询
+    if(strategy & kStrategyRoundRobin) {
+        if (++ CHOOSE_INDEX > 0xFFFF)
+            CHOOSE_INDEX = 0;
+        node = before[CHOOSE_INDEX % before.size()];
+        log_debug("by kStrategyRoundRoubin, return %s",
+                  zkPath::make_path(node.department_, node.service_, node.node_).c_str());
+        return 0;
+    }
+
+    // Step5. 默认的，根据优先级和权重的方式筛选
+    filtered.clear();
+    if (strategy & kStrategyWP) {
+        std::sort(before.begin(), before.end(), sort_node_by_priority);
+    }
+
+    uint32_t top_priority = before[0].priority_;
+    uint32_t total_weight = 0;
+    std::vector<uint32_t> weight_ladder;
+
+    for (size_t i=0; i<before.size(); ++i) {
+        if (before[i].priority_ < top_priority)
+            break;
+
+        total_weight += before[i].weight_;
+        weight_ladder.push_back(total_weight);
+    }
+
+    uint32_t rand_w = static_cast<uint32_t>(::random() % total_weight);
+    for (size_t i=0; i< weight_ladder.size(); ++i) {
+        if (rand_w <= weight_ladder[i]) {
+            node = before[i];
+            log_debug("filter by priority and weight, return %s",
+                      zkPath::make_path(node.department_, node.service_, node.node_).c_str());
+            return 0;
+        }
+    }
+
+    log_err("no available node, or your algorithm's problem.");
+    return -1;
 }
 
 

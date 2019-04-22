@@ -15,9 +15,23 @@
 
 #include <gtest/gtest_prod.h>
 
+// 如果选择该项，就会进行IDC筛选，
+// 如果IDC筛选后节点为空了，就会忽略该参数
+#define kStrategyIdc        (0x1u<<0)
+
+// 下面三种选择算法是互斥的，按照该优先级处理
+#define kStrategyRandom     (0x1u<<2)
+#define kStrategyRoundRobin (0x1u<<3)
+#define kStrategyWP         (0x1u<<4)
+
+#define kStrategyDefault    (kStrategyIdc | kStrategyWP)
+
+
+
 // 客户端使用的上层API
 
 namespace Clotho {
+
 
 class zkFrame {
 
@@ -31,7 +45,10 @@ public:
         sub_services_() {
     }
 
-    ~zkFrame() { }
+    ~zkFrame() {
+        std::lock_guard<std::mutex> lock(lock_);
+        client_.reset();
+    }
 
     // 禁止拷贝
     zkFrame(const zkFrame&) = delete;

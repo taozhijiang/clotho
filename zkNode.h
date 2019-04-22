@@ -7,19 +7,12 @@
 
 #include <sstream>
 
-namespace Clotho {
 
 #define kWPMax            100
 #define kWPMin            1
 #define kWPDefault        50
 
-#define kStrategyIdc      (0x1u<<0)
-#define kStrategyPriority (0x1u<<1)
-#define kStrategyWeight   (0x1u<<2)
-#define kStrategyDefault  (kStrategyPriority|kStrategyWeight)
-
-#define kStrategyRandom   (0x1u<<10)
-#define kStrategyRound    (0x1u<<11)
+namespace Clotho {
 
 class NodeType;
 class ServiceType;
@@ -32,15 +25,7 @@ class NodeType {
 public:
 
     NodeType(const std::string& department, const std::string& service, const std::string& node,
-             const std::map<std::string, std::string>& properties = std::map<std::string, std::string>() ) :
-        department_(department), service_(service), node_(node),
-        host_(), port_(0),
-        active_(false), enabled_(true),
-        idc_(),
-        priority_(kWPDefault),
-        weight_(kWPDefault),
-        properties_(properties) {
-    }
+             const std::map<std::string, std::string>& properties = std::map<std::string, std::string>());
 
     // 供标准容器使用，需要支持默认构造
     NodeType() = default;
@@ -85,13 +70,7 @@ public:
 class ServiceType {
 public:
     ServiceType(const std::string& department, const std::string& service,
-                const std::map<std::string, std::string>& properties = std::map<std::string, std::string>()) :
-        department_(department), service_(service),
-        enabled_(true),
-        pick_strategy_(kStrategyDefault),
-        nodes_(),
-        properties_(properties) {
-    }
+                const std::map<std::string, std::string>& properties = std::map<std::string, std::string>());
 
     // 供标准容器使用，需要支持默认构造
     ServiceType() = default;
