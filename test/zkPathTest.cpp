@@ -23,11 +23,12 @@ TEST(zkPathTest, PathPureAndValidateTest) {
     ASSERT_THAT(zkPath::normalize_path("  //prj/test"), Eq("/prj/test"));
     ASSERT_THAT(zkPath::normalize_path("//prj/test// "), Eq("/prj/test"));
     ASSERT_THAT(zkPath::normalize_path("//prj/ test"), Eq("/prj/ test"));
-    
+
     ASSERT_THAT(zkPath::validate_node("2015.3.3.1:1003"), Eq(false));
     ASSERT_THAT(zkPath::validate_node("20.3.3.1:1003"), Eq(true));
-    
-    std::string ip; uint16_t port;
+
+    std::string ip;
+    uint16_t port;
     ASSERT_THAT(zkPath::validate_node("20.3.3.1:1003", ip, port), Eq(true));
     ASSERT_THAT(ip, Eq("20.3.3.1"));
     ASSERT_THAT(port, Eq(1003));

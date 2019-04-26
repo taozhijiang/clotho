@@ -21,6 +21,7 @@ typedef std::map<std::string, ServiceType> MapServiceType;
 
 typedef std::vector<std::pair<std::string, std::string>> VectorPair;
 
+
 class NodeType {
 public:
 
@@ -53,8 +54,8 @@ public:
     uint16_t    port_;
 
     // watch时候填充的状态，便于快速筛选
-    bool active_;    // 远程active节点的值
-    bool enabled_;   // 本地是否禁用
+    bool        active_;    // 远程active节点的值
+    bool        enabled_;   // 本地是否禁用
 
     // 默认初始化是远程节点的值，除非
     // 1. 本地可以手动修改该值，表明是以本地的视角考量的服务
@@ -90,10 +91,10 @@ public:
     std::string department_;
     std::string service_;
 
-    bool enabled_;   // 本地是否禁用
+    bool        enabled_;   // 本地是否禁用
 
     uint32_t pick_strategy_;
-    std::map<std::string, NodeType>    nodes_;
+    std::map<std::string, NodeType> nodes_;
 
     std::map<std::string, std::string> properties_;
 };

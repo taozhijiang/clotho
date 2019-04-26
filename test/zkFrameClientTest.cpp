@@ -18,7 +18,7 @@ protected:
         ASSERT_THAT(ret, Eq(true));
 
         std::map<std::string, std::string> properties = {
-            {"ppa", "ppa_val"},
+            { "ppa", "ppa_val" },
         };
 
         NodeType node("dept", "srv_inst", "0.0.0.0:1222", properties);
@@ -48,7 +48,7 @@ TEST_F(FrameClientTest, ClientPickNodeTest) {
     // watch service
     ASSERT_THAT(client_.subscribe_service("dept", "srv_inst", 0), Eq(0));
 
-    NodeType node_g {};
+    NodeType node_g{};
     ASSERT_THAT(client_.pick_service_node("dept", "srv_inst", node_g), Eq(0));
 }
 

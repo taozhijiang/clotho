@@ -53,7 +53,7 @@ public:
     static std::string make_path(const std::string& d, const std::string& s) {
         return "/" + d + "/" + s;
     }
-    
+
     static std::string make_path(const std::string& d, const std::string& s, const std::string& n) {
         return "/" + d + "/" + s + "/" + n;
     }
@@ -70,9 +70,10 @@ public:
 
     // ip:port node_name strict
     static bool validate_node(const std::string& node_name, std::string& ip, uint16_t& port);
+
 };
 
-template <typename T>
+template<typename T>
 std::string to_string(const T& t) {
     std::stringstream ss;
     ss << t;
