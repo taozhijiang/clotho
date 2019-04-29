@@ -6,6 +6,7 @@
 
 namespace Clotho {
 
+static bool terminating = false;
 
 zkFrame::zkFrame(const std::string& idc) :
     client_(),
@@ -30,6 +31,9 @@ zkFrame::zkFrame(const std::string& idc) :
 }
 
 zkFrame::~zkFrame() {
+
+    terminating = true;
+    ::usleep(20);
 
     std::lock_guard<std::mutex> lock(lock_);
     
@@ -646,6 +650,9 @@ static inline std::string base_path(const std::string& path) {
 }
 
 int zkFrame::handle_zk_event(int type, int state, const char* path) {
+
+    if(terminating)
+        return 0;
 
     assert(type != ZOO_SESSION_EVENT);
 
