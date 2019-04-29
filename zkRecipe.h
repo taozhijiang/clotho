@@ -47,6 +47,10 @@ public:
     bool service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect);
     bool service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect);
 
+    // 主动释放所有的分布式锁，加快其他节点抢占锁的时间
+    void revoke_all_locks(const std::string& expect);
+
+
     int hook_node_calls(const std::string& full, const std::map<std::string, std::string>& properties);
     int hook_service_calls(const std::string& full, const std::map<std::string, std::string>& properties);
 
@@ -58,7 +62,13 @@ private:
 
     std::mutex serv_lock_;
     std::condition_variable serv_notify_;
+
+    // 目前没有用到这里的properties_，主要是用key做唯一性检查，防止不关心的
+    // 服务造成伪唤醒
     std::map<std::string, std::map<std::string, std::string>> serv_properties_;
+
+    // 本地所注册的所有分布式锁实例
+    std::map<std::string, std::string> serv_distr_locks_;
 
     bool try_ephemeral_path_holder(const std::string& path, const std::string& expect);
 

@@ -30,7 +30,12 @@ zkFrame::zkFrame(const std::string& idc) :
 }
 
 zkFrame::~zkFrame() {
+
     std::lock_guard<std::mutex> lock(lock_);
+    
+    std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
+    recipe_->revoke_all_locks(expect);
+
     client_.reset();
 }
 
@@ -72,7 +77,7 @@ bool zkFrame::init(const std::string& hostline) {
 int zkFrame::register_node(const NodeType& node, bool overwrite) {
 
     std::vector<NodeType> nodes;
-    if (!substitute_node(node, nodes)) {
+    if (substitute_node(node, nodes) != 0) {
         log_err("substitue to real nodes failed.");
         return -1;
     }
@@ -579,7 +584,8 @@ bool zkFrame::recipe_service_try_lock(const std::string& dept, const std::string
         return code;
     }  
 
-    return recipe_->service_try_lock(dept, service, lock_name, primary_node_addr_, sec);   
+    std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
+    return recipe_->service_try_lock(dept, service, lock_name, expect, sec);   
 }
 
 bool zkFrame::recipe_service_lock(const std::string& dept, const std::string& service, const std::string& lock_name) {
@@ -596,7 +602,8 @@ bool zkFrame::recipe_service_lock(const std::string& dept, const std::string& se
         return code;
     }  
 
-    return recipe_->service_lock(dept, service, lock_name, primary_node_addr_);   
+    std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
+    return recipe_->service_lock(dept, service, lock_name, expect);   
 }
 
 bool zkFrame::recipe_service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name) {
@@ -613,7 +620,8 @@ bool zkFrame::recipe_service_unlock(const std::string& dept, const std::string& 
         return code;
     }  
 
-    return recipe_->service_unlock(dept, service, lock_name, primary_node_addr_);   
+    std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
+    return recipe_->service_unlock(dept, service, lock_name, expect);   
 } 
 
 bool zkFrame::recipe_service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name) {
@@ -623,7 +631,8 @@ bool zkFrame::recipe_service_lock_owner(const std::string& dept, const std::stri
         return false;
     }
 
-    return recipe_->service_lock_owner(dept, service, lock_name, primary_node_addr_);   
+    std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
+    return recipe_->service_lock_owner(dept, service, lock_name, expect);   
 }
 
 
@@ -999,11 +1008,11 @@ int zkFrame::do_handle_zk_node_properties_event(int type, const char* node_prope
 
 // internal
 // 根据0.0.0.0扩充得到实体节点
-bool zkFrame::substitute_node(const NodeType& node, std::vector<NodeType>& nodes) {
+int zkFrame::substitute_node(const NodeType& node, std::vector<NodeType>& nodes) {
 
     if (node.department_.empty() || node.service_.empty() || !zkPath::validate_node(node.node_)) {
         log_err("invalid Node parameter provide.");
-        return false;
+        return -1;
     }
 
     std::string host = node.node_.substr(0, node.node_.find(":"));
@@ -1017,7 +1026,7 @@ bool zkFrame::substitute_node(const NodeType& node, std::vector<NodeType>& nodes
         n_node.host_ = host;
         n_node.port_ = ::atoi(port.c_str());
         nodes.push_back(n_node);
-        return true;
+        return 0;
     }
 
     // 添加本地实际的物理地址
@@ -1030,7 +1039,7 @@ bool zkFrame::substitute_node(const NodeType& node, std::vector<NodeType>& nodes
         nodes.push_back(n_node);
     }
 
-    return !nodes.empty();
+    return 0;
 }
 
 

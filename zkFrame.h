@@ -80,7 +80,7 @@ public:
     //                   需要使用这个功能，那么服务的发布节点也需要sub服务才能实现对应功能
     int recipe_attach_node_property_cb(const std::string& dept, const std::string& service, uint16_t port,
                                          const PropertyCall& func) {
-        std::string node = primary_node_addr_ + ":" + std::to_string(static_cast<unsigned long long int>(port));
+        std::string node = primary_node_addr_ + ":" + Clotho::to_string(port);
         return recipe_attach_node_property_cb(dept, service, node, func);
     }
 
@@ -113,7 +113,7 @@ public:
 
 private:
     //
-    bool substitute_node(const NodeType& node, std::vector<NodeType>& nodes);
+    int substitute_node(const NodeType& node, std::vector<NodeType>& nodes);
 
     int subscribe_node(NodeType& node);
 

@@ -72,6 +72,10 @@ bool zkRecipe::service_try_lock(const std::string& dept, const std::string& serv
     // wait until sec ...
     std::unique_lock<std::mutex> lock(serv_lock_);
 
+    auto iter = serv_properties_.find(serv_path);
+    if(iter == serv_properties_.end())
+        serv_properties_[serv_path] = std::map<std::string, std::string>();
+
     if(sec == 0)
         return try_ephemeral_path_holder(lock_path, expect);
 
@@ -96,7 +100,12 @@ bool zkRecipe::service_try_lock(const std::string& dept, const std::string& serv
 #endif
     }
 
-    return try_ephemeral_path_holder(lock_path, expect);
+    if( try_ephemeral_path_holder(lock_path, expect) ) {
+        serv_distr_locks_[lock_path] = expect;
+        return true;
+    }
+
+    return false;
 }
 
 bool zkRecipe::service_lock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect) {
@@ -105,11 +114,16 @@ bool zkRecipe::service_lock(const std::string& dept, const std::string& service,
     std::string lock_path = zkPath::extend_property(serv_path, "lock_" + lock_name);
 
     std::unique_lock<std::mutex> lock(serv_lock_);
+    auto iter = serv_properties_.find(serv_path);
+    if(iter == serv_properties_.end())
+        serv_properties_[serv_path] = std::map<std::string, std::string>();
+
 
     while (!try_ephemeral_path_holder(lock_path, expect)) {
         serv_notify_.wait(lock);
     }
 
+    serv_distr_locks_[lock_path] = expect;
     return true;
 }
 
@@ -128,6 +142,7 @@ bool zkRecipe::service_unlock(const std::string& dept, const std::string& servic
     // we are the holder
     if(value == expect) {
         frame_.client_->zk_delete(lock_path.c_str());
+        serv_distr_locks_.erase(lock_path);
         return true;
     }
 
@@ -148,9 +163,12 @@ bool zkRecipe::service_lock_owner(const std::string& dept, const std::string& se
         return false;
 
     // we are the holder
-    if(value == expect) 
+    if(value == expect) {
+        serv_distr_locks_[lock_path] = expect;
         return true;
+    }
 
+    serv_distr_locks_[lock_path] = value;
     return false; 
 }
 
@@ -164,6 +182,25 @@ bool zkRecipe::try_ephemeral_path_holder(const std::string& path, const std::str
         return false;
 
     return value == expect;
+}
+
+
+void zkRecipe::revoke_all_locks(const std::string& expect) {
+
+    std::unique_lock<std::mutex> lock(serv_lock_);
+
+    for(auto iter=serv_distr_locks_.begin(); iter != serv_distr_locks_.end(); ++iter) {
+        
+        std::string value;
+        if(frame_.client_->zk_get(iter->first.c_str(), value, 1, NULL) != 0)
+            continue;
+
+        if(value == expect)
+            frame_.client_->zk_delete(iter->first.c_str());
+    }
+
+    serv_distr_locks_.clear();
+
 }
 
 } // Clotho
