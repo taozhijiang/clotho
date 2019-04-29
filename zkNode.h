@@ -22,6 +22,14 @@ typedef std::map<std::string, ServiceType> MapServiceType;
 typedef std::vector<std::pair<std::string, std::string>> VectorPair;
 
 
+// NodeType的properties中，对于应用程序使用的配置建议以cfg_为前缀统一命名，而
+// 目前框架使用的保留的属性键有：
+// 1. active 临时节点，值为“1”，表明该节点是否存活；
+// 2. idc    节点所在idc，如果节点选择算法包含kStrategyIdc，则会用到改值；
+// 3. priority & weight 节点配置的优先级和权重，范围1-100，默认为50；
+// 4. birth  临时节点，最新一次的发布日期时间
+
+
 class NodeType {
 public:
 
@@ -65,10 +73,18 @@ public:
     uint16_t    weight_;    // 1~100，默认50
 
     std::map<std::string, std::string> properties_;
+
+    friend std::ostream& operator<<(std::ostream& os, const NodeType& node);
 };
 
 
+
+// ServiceType的properties中，我们主要提供的是服务治理相关的属性，不支持应用程序的配置参数
+// 目前框架使用的保留的属性键有：
+// 1. lock_xxx-xx   临时节点，服务级别的分布式互斥锁的实现，其值为节点名
+
 class ServiceType {
+
 public:
     ServiceType(const std::string& department, const std::string& service,
                 const std::map<std::string, std::string>& properties = std::map<std::string, std::string>());
@@ -97,6 +113,8 @@ public:
     std::map<std::string, NodeType> nodes_;
 
     std::map<std::string, std::string> properties_;
+
+    friend std::ostream& operator<<(std::ostream& os, const ServiceType& srv);
 };
 
 

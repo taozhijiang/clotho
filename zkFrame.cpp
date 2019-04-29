@@ -6,21 +6,55 @@
 
 namespace Clotho {
 
-bool zkFrame::init(const std::string& hostline, const std::string& idc) {
 
-    if (hostline.empty() || idc.empty()) {
+zkFrame::zkFrame(const std::string& idc) :
+    client_(),
+    recipe_(),
+    idc_(idc),
+    primary_node_addr_(),
+    whole_nodes_addr_(),
+    lock_(),
+    pub_nodes_(),
+    sub_services_() {
+
+    auto local_ips = zkPath::get_local_ips();
+    if(local_ips.empty()) {
+        log_err("Get LocalIps failed.");
+        throw ConstructException("Get LocalIps failed.");
+    }
+    primary_node_addr_ = local_ips[0];
+
+    for (size_t i = 0; i < local_ips.size(); ++i) {
+        whole_nodes_addr_.emplace_back(local_ips[i]);
+    }
+}
+
+zkFrame::~zkFrame() {
+    std::lock_guard<std::mutex> lock(lock_);
+    client_.reset();
+}
+
+
+bool zkFrame::init(const std::string& hostline) {
+
+    if (hostline.empty() || idc_.empty() || 
+        whole_nodes_addr_.empty() || primary_node_addr_.empty()) {
         return false;
     }
-
-    idc_ = idc;
 
     auto func = std::bind(&zkFrame::handle_zk_event, this,
                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
-    client_.reset(new zkClient(hostline, func, idc));
+    client_.reset(new zkClient(hostline, func, idc_));
     if (!client_ || !client_->zk_init()) {
         log_err("create and init zkClient failed.");
         client_.reset();
+        return false;
+    }
+
+    recipe_.reset(new zkRecipe(*this));
+    if(!recipe_) {
+        log_err("create zkRecipe failed.");
         return false;
     }
 
@@ -38,8 +72,8 @@ bool zkFrame::init(const std::string& hostline, const std::string& idc) {
 int zkFrame::register_node(const NodeType& node, bool overwrite) {
 
     std::vector<NodeType> nodes;
-    if (!expand_substant_node(node, nodes)) {
-        log_err("expand nodes failed.");
+    if (!substitute_node(node, nodes)) {
+        log_err("substitue to real nodes failed.");
         return -1;
     }
 
@@ -68,10 +102,13 @@ int zkFrame::register_node(const NodeType& node, bool overwrite) {
         // add additional active path
         // EPHEMERAL node here
         std::string active_path =
-            zkPath::extend_property(zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_),
-                                    "active");
+            zkPath::extend_property(
+                    zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_), "active");
 
-        client_->zk_create(active_path.c_str(), "1", &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL);
+        if( client_->zk_create(active_path.c_str(), "1", &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL) != 0 ){
+            log_err("Create EPHEMERAL active failed, cirital error: %s", active_path.c_str());
+            continue;
+        }
 
         {
             std::string full = zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_);
@@ -247,6 +284,7 @@ int zkFrame::subscribe_node(NodeType& node) {
             }
 
             // 特殊的属性值处理
+            // 这些类型的属性是不会丢到properties_中保存的
             if (sub_path[i] == "active") {
                 node.active_ = (value == "1" ? true : false);
             } else if (sub_path[i] == "weight") {
@@ -260,9 +298,11 @@ int zkFrame::subscribe_node(NodeType& node) {
             } else if (sub_path[i] == "idc") {
                 if (value != "")
                     node.idc_ = value;
-            } else {
-                node.properties_[sub_path[i]] = value;
             }
+            
+            // all will be recorded in properties_
+            node.properties_[sub_path[i]] = value;
+
         } else {
             log_err("unhandled path: %s", sub_node.c_str());
         }
@@ -450,8 +490,146 @@ int zkFrame::pick_service_node(const std::string& department, const std::string&
 }
 
 
+int zkFrame::periodicly_care() {
+
+    std::vector<std::string> services{};
+
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        for (auto iter = sub_services_->begin(); iter != sub_services_->end(); ++iter)
+            services.push_back(iter->first);
+    }
+
+    for (size_t i = 0; i < services.size(); ++i) {
+        std::string depart;
+        std::string service;
+        if (ServiceType::service_parse(services[i].c_str(), depart, service))
+            subscribe_service(depart, service);
+    }
+
+    return 0;
+}
+
+
+
+int zkFrame::set_priority(NodeType& node, uint16_t priority) {
+    uint16_t original = node.priority_;
+
+    node.priority_ = priority;
+    return original;
+}
+
+int zkFrame::adj_priority(NodeType& node, int16_t step) {
+    uint16_t original = node.priority_;
+
+    int16_t total = node.priority_ + step;
+    total = total < kWPMin ? kWPMin : total;
+    total = total > kWPMax ? kWPMax : total;
+    node.priority_ = static_cast<uint16_t>(total);
+    return original;
+}
+
+int zkFrame::set_weight(NodeType& node, uint16_t weight) {
+    uint16_t original = node.weight_;
+
+    node.weight_ = weight;
+    return original;
+}
+
+int zkFrame::adj_weight(NodeType& node, int16_t step) {
+    uint16_t original = node.weight_;
+
+    int16_t total = node.weight_ + step;
+    total = total < kWPMin ? kWPMin : total;
+    total = total > kWPMax ? kWPMax : total;
+    node.weight_ = static_cast<uint16_t>(total);
+    return original;
+}
+
+int zkFrame::recipe_attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node, 
+                                            const PropertyCall& func) {
+
+
+    if(dept.empty() || service.empty() || !zkPath::validate_node(node) || !func) {
+        log_err("invalid node path params.");
+        return -1;
+    }
+
+    // 前提是先注册服务的监听，然后再调用recipe注册func
+    int code = subscribe_service(dept, service);
+    if(code != 0) {
+        log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
+        return code;
+    }               
+
+    return recipe_->attach_node_property_cb(dept, service, node, func);                         
+}
+
+bool zkFrame::recipe_service_try_lock(const std::string& dept, const std::string& service, const std::string& lock_name, uint32_t sec) {
+    
+    if(dept.empty() || service.empty() || lock_name.empty()) {
+        log_err("invalid service path params.");
+        return -1;
+    }
+
+    // 前提是先注册服务的监听，然后再调用recipe注册func
+    int code = subscribe_service(dept, service);
+    if(code != 0) {
+        log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
+        return code;
+    }  
+
+    return recipe_->service_try_lock(dept, service, lock_name, primary_node_addr_, sec);   
+}
+
+bool zkFrame::recipe_service_lock(const std::string& dept, const std::string& service, const std::string& lock_name) {
+    
+    if(dept.empty() || service.empty() || lock_name.empty()) {
+        log_err("invalid service path params.");
+        return -1;
+    }
+
+    // 前提是先注册服务的监听，然后再调用recipe注册func
+    int code = subscribe_service(dept, service);
+    if(code != 0) {
+        log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
+        return code;
+    }  
+
+    return recipe_->service_lock(dept, service, lock_name, primary_node_addr_);   
+}
+
+bool zkFrame::recipe_service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name) {
+    
+    if(dept.empty() || service.empty() || lock_name.empty()) {
+        log_err("invalid service path params.");
+        return -1;
+    }
+
+    // 前提是先注册服务的监听，然后再调用recipe注册func
+    int code = subscribe_service(dept, service);
+    if(code != 0) {
+        log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
+        return code;
+    }  
+
+    return recipe_->service_unlock(dept, service, lock_name, primary_node_addr_);   
+} 
+
+bool zkFrame::recipe_service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name) {
+    
+    if(dept.empty() || service.empty() || lock_name.empty()) {
+        log_err("invalid service path params.");
+        return false;
+    }
+
+    return recipe_->service_lock_owner(dept, service, lock_name, primary_node_addr_);   
+}
+
+
+
 // 受限安全使用
-static std::string base_path(const std::string& path) {
+static inline std::string base_path(const std::string& path) {
     if (path.empty())
         return "";
 
@@ -490,13 +668,11 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
 
     // 检查是否需要回调property_cb
 
-    std::string cb_path;
+    std::string cb_serv_path;
+    std::string cb_node_path;
     std::map<std::string, std::string> properties;
 
     if (code == 0) {
-
-        std::string cb_srev_path;
-        std::string cb_node_path;
 
         do {
 
@@ -505,11 +681,11 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
                  type == ZOO_CHANGED_EVENT ||
                  type == ZOO_CHILD_EVENT ||
                  type == ZOO_NOTWATCHING_EVENT)) {
-                cb_srev_path = path;
+                cb_serv_path = path;
             } else if (tp == PathType::kServiceProperty &&
                        (type == ZOO_CHANGED_EVENT ||
                         type == ZOO_NOTWATCHING_EVENT)) {
-                cb_srev_path = base_path(path);
+                cb_serv_path = base_path(path);
             } else if (tp == PathType::kNode &&
                        (type == ZOO_CHANGED_EVENT ||
                         type == ZOO_CHILD_EVENT ||
@@ -521,47 +697,37 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
                 cb_node_path = base_path(path);
             }
 
-            if (!cb_srev_path.empty()) {
+            if (!cb_serv_path.empty()) {
 
-                cb_path = cb_srev_path;
                 std::lock_guard<std::mutex> lock(lock_);
-                auto iter = sub_services_->find(cb_srev_path);
-                if (iter != sub_services_->end())
+                auto iter = sub_services_->find(cb_serv_path);
+                if (iter != sub_services_->end()) {
                     properties = iter->second.properties_;
+                    
+                    code = recipe_->hook_service_calls(cb_serv_path, properties);
+                }
 
             } else if (!cb_node_path.empty()) {
 
-                cb_path = cb_node_path;
                 std::string dept;
                 std::string serv;
                 std::string node;
-                if (NodeType::node_parse(cb_path.c_str(), dept, serv, node)) {
+                if (NodeType::node_parse(cb_node_path.c_str(), dept, serv, node)) {
                     std::lock_guard<std::mutex> lock(lock_);
                     auto iter = sub_services_->find(base_path(cb_node_path));
                     if (iter != sub_services_->end()) {
                         auto node_p = iter->second.nodes_.find(node);
-                        if (node_p != iter->second.nodes_.end())
+                        if (node_p != iter->second.nodes_.end()) {
                             properties = node_p->second.properties_;
+
+                            code = recipe_->hook_node_calls(cb_node_path, properties);
+                        }
                     }
                 }
 
             }
 
         } while (0);
-
-        PropertyCall func;
-        if (!cb_path.empty() && !properties.empty()) {
-            {
-                std::lock_guard<std::mutex> lock(lock_);
-                auto iter = property_callmap_.find(cb_path);
-                if (iter != property_callmap_.end())
-                    func = iter->second;
-            }
-
-            if (func)
-                func(cb_path.c_str(), properties);
-        }
-
     }
 
     return code;
@@ -833,7 +999,7 @@ int zkFrame::do_handle_zk_node_properties_event(int type, const char* node_prope
 
 // internal
 // 根据0.0.0.0扩充得到实体节点
-bool zkFrame::expand_substant_node(const NodeType& node, std::vector<NodeType>& nodes) {
+bool zkFrame::substitute_node(const NodeType& node, std::vector<NodeType>& nodes) {
 
     if (node.department_.empty() || node.service_.empty() || !zkPath::validate_node(node.node_)) {
         log_err("invalid Node parameter provide.");
@@ -844,6 +1010,7 @@ bool zkFrame::expand_substant_node(const NodeType& node, std::vector<NodeType>& 
     std::string port = node.node_.substr(node.node_.find(":") + 1);
     nodes.clear();
 
+    // 提供实体节点
     if (host != "0.0.0.0") {
         NodeType n_node = node;
         n_node.idc_ = idc_;
@@ -854,12 +1021,11 @@ bool zkFrame::expand_substant_node(const NodeType& node, std::vector<NodeType>& 
     }
 
     // 添加本地实际的物理地址
-    auto local_ips = zkPath::get_local_ips();
-    for (size_t i = 0; i < local_ips.size(); ++i) {
+    for (size_t i = 0; i < whole_nodes_addr_.size(); ++i) {
         NodeType n_node = node;
-        n_node.node_ = local_ips[i] + ":" + port;
+        n_node.node_ = whole_nodes_addr_[i] + ":" + port;
         n_node.idc_ = idc_;
-        n_node.host_ = local_ips[i];
+        n_node.host_ = whole_nodes_addr_[i];
         n_node.port_ = ::atoi(port.c_str());
         nodes.push_back(n_node);
     }

@@ -1,3 +1,5 @@
+#include <ostream>
+
 #include "zkPath.h"
 #include "zkFrame.h"
 #include "zkNode.h"
@@ -36,6 +38,12 @@ std::string NodeType::str() const {
     return ss.str();
 }
 
+
+std::ostream& operator<<(std::ostream& os, const NodeType& node) {
+    os << node.str() << std::endl;
+    return os;
+}
+
 // NodeType
 bool NodeType::prepare_path(VectorPair& paths) {
 
@@ -70,6 +78,12 @@ bool NodeType::prepare_path(VectorPair& paths) {
             int priority = ::atoi(iter->second.c_str());
             if (priority >= kWPMin && priority <= kWPMax)
                 priority_ = priority;
+            continue;
+        }
+
+        // 临时的保留节点名
+        if(iter->first == "active") {
+            log_err("active is reserved, should not put in properties.");
             continue;
         }
 
@@ -159,6 +173,11 @@ std::string ServiceType::str() const {
     }
 
     return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& os, const ServiceType& srv) {
+    os << srv.str() << std::endl;
+    return os;
 }
 
 bool ServiceType::service_parse(const char* fp, std::string& d, std::string& s) {
