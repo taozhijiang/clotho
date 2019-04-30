@@ -27,7 +27,7 @@ public:
     zkFrame* client_;
 };
 
-int callback_node(const std::string& dept, const std::string& serv, const std::string& node, 
+int callback_node(const std::string& dept, const std::string& serv, const std::string& node,
                   const std::map<std::string, std::string>& property) {
 
     std::cout << " source " << node << std::endl;
@@ -42,7 +42,7 @@ int callback_node(const std::string& dept, const std::string& serv, const std::s
 
 int callback_serv(const std::string& dept, const std::string& serv,
                   const std::map<std::string, std::string>& property) {
-    
+
     std::cout << " source " << serv << std::endl;
     std::cout << " propertiy: " << std::endl;
     for (auto iter = property.begin(); iter != property.end(); ++iter) {

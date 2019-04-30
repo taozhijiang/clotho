@@ -21,7 +21,7 @@ zkFrame::zkFrame(const std::string& idc) :
     sub_services_() {
 
     auto local_ips = zkPath::get_local_ips();
-    if(local_ips.empty()) {
+    if (local_ips.empty()) {
         log_err("Get LocalIps failed.");
         throw ConstructException("Get LocalIps failed.");
     }
@@ -46,7 +46,7 @@ zkFrame::~zkFrame() {
 
 bool zkFrame::init(const std::string& hostline) {
 
-    if (hostline.empty() || idc_.empty() || 
+    if (hostline.empty() || idc_.empty() ||
         whole_nodes_addr_.empty() || primary_node_addr_.empty()) {
         return false;
     }
@@ -62,7 +62,7 @@ bool zkFrame::init(const std::string& hostline) {
     }
 
     recipe_.reset(new zkRecipe(*this));
-    if(!recipe_) {
+    if (!recipe_) {
         log_err("create zkRecipe failed.");
         return false;
     }
@@ -112,9 +112,9 @@ int zkFrame::register_node(const NodeType& node, bool overwrite) {
         // EPHEMERAL node here
         std::string active_path =
             zkPath::extend_property(
-                    zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_), "active");
+            zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_), "active");
 
-        if( client_->zk_create(active_path.c_str(), "1", &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL) != 0 ){
+        if (client_->zk_create(active_path.c_str(), "1", &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL) != 0) {
             log_err("Create EPHEMERAL active failed, cirital error: %s", active_path.c_str());
             continue;
         }
@@ -194,7 +194,7 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
     srv.properties_["enable"] = value;
     srv.enabled_ = (value == "1");
     srv.pick_strategy_ = strategy ? strategy : kStrategyDefault;
-    srv.with_nodes_ = with_nodes; 
+    srv.with_nodes_ = with_nodes;
 
     // 处理子节点
     std::vector<std::string> sub_path{};
@@ -216,7 +216,7 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
         } else if (tp == PathType::kNode) {
 
             // 不需要处理子节点
-            if(!srv.with_nodes_)
+            if (!srv.with_nodes_)
                 continue;
 
             std::string department;
@@ -233,7 +233,7 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
                 continue;
             }
 
-            log_debug("successfully detected node %s", sub_node.c_str());
+            log_debug("successfully detect and subscribe node %s", sub_node.c_str());
             srv.nodes_[node_p] = node;
         } else {
             // 其他类型节点？
@@ -320,7 +320,7 @@ int zkFrame::internal_subscribe_node(NodeType& node) {
                 if (value != "")
                     node.idc_ = value;
             }
-            
+
             // all will be recorded in properties_
             node.properties_[sub_path[i]] = value;
 
@@ -567,33 +567,16 @@ int zkFrame::adj_weight(NodeType& node, int16_t step) {
     return original;
 }
 
-int zkFrame::recipe_attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node, 
+int zkFrame::recipe_attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node,
                                             const NodePropertyCall& func) {
 
 
-    if(dept.empty() || service.empty() || !zkPath::validate_node(node) || !func) {
+    if (dept.empty() || service.empty() || !zkPath::validate_node(node) || !func) {
         log_err("invalid node path params.");
         return -1;
     }
 
-    // 前提是先注册服务的监听，然后再调用recipe注册func
-    int code = internal_subscribe_service(dept, service);
-    if(code != 0) {
-        log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
-        return code;
-    }               
-
-    return recipe_->attach_node_property_cb(dept, service, node, func);                         
-}
-
-int zkFrame::recipe_attach_serv_property_cb(const std::string& dept, const std::string& service, const ServPropertyCall& func) {
-
-
-    if(dept.empty() || service.empty() || !func) {
-        log_err("invalid node path params.");
-        return -1;
-    }
-
+    // property_cb 的注册，必须要注册with_nodes
     uint32_t strategy   = kStrategyDefault;
 
     {
@@ -607,77 +590,96 @@ int zkFrame::recipe_attach_serv_property_cb(const std::string& dept, const std::
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
     int code = subscribe_service(dept, service, strategy, true);
-    if(code != 0) {
+    if (code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
-    }               
+    }
 
-    return recipe_->attach_serv_property_cb(dept, service, func);                         
+    return recipe_->attach_node_property_cb(dept, service, node, func);
+}
+
+int zkFrame::recipe_attach_serv_property_cb(const std::string& dept, const std::string& service, const ServPropertyCall& func) {
+
+
+    if (dept.empty() || service.empty() || !func) {
+        log_err("invalid node path params.");
+        return -1;
+    }
+
+
+    // 前提是先注册服务的监听，然后再调用recipe注册func
+    int code = internal_subscribe_service(dept, service);
+    if (code != 0) {
+        log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
+        return code;
+    }
+
+    return recipe_->attach_serv_property_cb(dept, service, func);
 }
 
 bool zkFrame::recipe_service_try_lock(const std::string& dept, const std::string& service, const std::string& lock_name, uint32_t sec) {
-    
-    if(dept.empty() || service.empty() || lock_name.empty()) {
+
+    if (dept.empty() || service.empty() || lock_name.empty()) {
         log_err("invalid service path params.");
         return -1;
     }
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
     int code = internal_subscribe_service(dept, service);
-    if(code != 0) {
+    if (code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
-    }  
+    }
 
     std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
-    return recipe_->service_try_lock(dept, service, lock_name, expect, sec);   
+    return recipe_->service_try_lock(dept, service, lock_name, expect, sec);
 }
 
 bool zkFrame::recipe_service_lock(const std::string& dept, const std::string& service, const std::string& lock_name) {
-    
-    if(dept.empty() || service.empty() || lock_name.empty()) {
+
+    if (dept.empty() || service.empty() || lock_name.empty()) {
         log_err("invalid service path params.");
         return -1;
     }
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
     int code = internal_subscribe_service(dept, service);
-    if(code != 0) {
+    if (code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
-    }  
+    }
 
     std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
-    return recipe_->service_lock(dept, service, lock_name, expect);   
+    return recipe_->service_lock(dept, service, lock_name, expect);
 }
 
 bool zkFrame::recipe_service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name) {
-    
-    if(dept.empty() || service.empty() || lock_name.empty()) {
+
+    if (dept.empty() || service.empty() || lock_name.empty()) {
         log_err("invalid service path params.");
         return -1;
     }
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
     int code = internal_subscribe_service(dept, service);
-    if(code != 0) {
+    if (code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
-    }  
+    }
 
     std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
-    return recipe_->service_unlock(dept, service, lock_name, expect);   
-} 
+    return recipe_->service_unlock(dept, service, lock_name, expect);
+}
 
 bool zkFrame::recipe_service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name) {
-    
-    if(dept.empty() || service.empty() || lock_name.empty()) {
+
+    if (dept.empty() || service.empty() || lock_name.empty()) {
         log_err("invalid service path params.");
         return false;
     }
 
     std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
-    return recipe_->service_lock_owner(dept, service, lock_name, expect);   
+    return recipe_->service_lock_owner(dept, service, lock_name, expect);
 }
 
 
@@ -692,7 +694,7 @@ static inline std::string base_path(const std::string& path) {
 
 int zkFrame::handle_zk_event(int type, int state, const char* path) {
 
-    if(terminating)
+    if (terminating)
         return 0;
 
     assert(type != ZOO_SESSION_EVENT);
@@ -727,7 +729,6 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
 
     std::string cb_serv_path;
     std::string cb_node_path;
-    std::map<std::string, std::string> properties;
 
     if (code == 0) {
 
@@ -754,6 +755,8 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
                 cb_node_path = base_path(path);
             }
 
+
+            std::map<std::string, std::string> properties;
             if (!cb_serv_path.empty()) {
 
                 std::string dept;
@@ -762,10 +765,15 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
                     break;
                 }
 
-                std::lock_guard<std::mutex> lock(lock_);
-                auto iter = sub_services_->find(cb_serv_path);
-                if (iter != sub_services_->end()) {
-                    properties = iter->second.properties_;
+                {
+                    std::lock_guard<std::mutex> lock(lock_);
+                    auto iter = sub_services_->find(cb_serv_path);
+                    if (iter != sub_services_->end()) {
+                        properties = iter->second.properties_;
+                    }
+                }
+
+                if (!dept.empty() && !serv.empty() && !properties.empty()) {
                     code = recipe_->hook_service_calls(dept, serv, properties);
                 }
 
@@ -778,15 +786,19 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
                     break;
                 }
 
-                std::lock_guard<std::mutex> lock(lock_);
-                auto iter = sub_services_->find(base_path(cb_node_path));
-                if (iter != sub_services_->end()) {
-                    auto node_p = iter->second.nodes_.find(node);
-                    if (node_p != iter->second.nodes_.end()) {
-                        properties = node_p->second.properties_;
-
-                        code = recipe_->hook_node_calls(dept, serv, node, properties);
+                {
+                    std::lock_guard<std::mutex> lock(lock_);
+                    auto iter = sub_services_->find(base_path(cb_node_path));
+                    if (iter != sub_services_->end()) {
+                        auto node_p = iter->second.nodes_.find(node);
+                        if (node_p != iter->second.nodes_.end()) {
+                            properties = node_p->second.properties_;
+                        }
                     }
+                }
+
+                if (!dept.empty() && !serv.empty() && !node.empty() && !properties.empty()) {
+                    code = recipe_->hook_node_calls(dept, serv, node, properties);
                 }
 
             }

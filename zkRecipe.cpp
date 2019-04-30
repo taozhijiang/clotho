@@ -26,7 +26,7 @@ int zkRecipe::attach_node_property_cb(const std::string& dept, const std::string
 }
 
 
-int zkRecipe::attach_serv_property_cb(const std::string& dept, const std::string& service, 
+int zkRecipe::attach_serv_property_cb(const std::string& dept, const std::string& service,
                                       const ServPropertyCall& func) {
     std::string path = zkPath::make_path(dept, service);
 
@@ -42,7 +42,7 @@ int zkRecipe::attach_serv_property_cb(const std::string& dept, const std::string
 }
 
 int zkRecipe::hook_node_calls(const std::string& dept, const std::string& serv, const std::string& node, const MapString& properties) {
-    
+
     int code = 0;
     NodePropertyCall func;
     const std::string fullpath = zkPath::make_path(dept, serv, node);
@@ -50,10 +50,10 @@ int zkRecipe::hook_node_calls(const std::string& dept, const std::string& serv, 
     do {
 
         std::lock_guard<std::mutex> lock(node_lock_);
-        
+
         // 首先检查properties是否真的修改了，因为周期性的检查机制，可能会导致该函数伪调用
         auto iter_p = node_properties_.find(fullpath);
-        if(iter_p != node_properties_.end() && iter_p->second == properties)
+        if (iter_p != node_properties_.end() && iter_p->second == properties)
             break;
 
         // 更新或者记录之
@@ -64,17 +64,17 @@ int zkRecipe::hook_node_calls(const std::string& dept, const std::string& serv, 
         if (iter_c != node_property_callmap_.end())
             func = iter_c->second;
 
-        if (func)
-            code = func(dept, serv, node, properties);
-
     } while (0);
+
+    if (func)
+        code = func(dept, serv, node, properties);
 
     return code;
 }
 
 
 int zkRecipe::hook_service_calls(const std::string& dept, const std::string& serv, const MapString& properties) {
-    
+
     int code = 0;
     const std::string fullpath = zkPath::make_path(dept, serv);
     ServPropertyCall func;
@@ -85,7 +85,7 @@ int zkRecipe::hook_service_calls(const std::string& dept, const std::string& ser
 
         // 首先检查properties是否真的修改了，因为周期性的检查机制，可能会导致该函数伪调用
         auto iter_p = serv_properties_.find(fullpath);
-        if(iter_p != serv_properties_.end() && iter_p->second == properties)
+        if (iter_p != serv_properties_.end() && iter_p->second == properties)
             break;
 
         serv_properties_[fullpath] = properties;
@@ -94,18 +94,18 @@ int zkRecipe::hook_service_calls(const std::string& dept, const std::string& ser
         if (iter_s != serv_property_callmap_.end())
             func = iter_s->second;
 
-        if (func)
-            code = func(dept, serv, properties);
-
-        // 看是否需要通知内部业务
-        for(auto iter = serv_distr_locks_.begin(); iter!=serv_distr_locks_.end(); ++iter) {
-            if(::strncmp(iter->first.c_str(), fullpath.c_str(), fullpath.size()) == 0) {
-                serv_notify_.notify_all();
-                break;
-            }
-        }
-
     } while (0);
+
+    if (func)
+        code = func(dept, serv, properties);
+
+    // 看是否需要通知内部业务
+    for (auto iter = serv_distr_locks_.begin(); iter != serv_distr_locks_.end(); ++iter) {
+        if (::strncmp(iter->first.c_str(), fullpath.c_str(), fullpath.size()) == 0) {
+            serv_notify_.notify_all();
+            break;
+        }
+    }
 
     return code;
 }
@@ -113,7 +113,7 @@ int zkRecipe::hook_service_calls(const std::string& dept, const std::string& ser
 
 bool zkRecipe::service_try_lock(const std::string& dept, const std::string& service, const std::string& lock_name,
                                 const std::string& expect, uint32_t sec) {
-    
+
     std::string serv_path = zkPath::make_path(dept, service);
     std::string lock_path = zkPath::extend_property(serv_path, "lock_" + lock_name);
 
@@ -123,12 +123,12 @@ bool zkRecipe::service_try_lock(const std::string& dept, const std::string& serv
     serv_distr_locks_[lock_path] = "";
 
     auto iter = serv_properties_.find(serv_path);
-    if(iter == serv_properties_.end())
+    if (iter == serv_properties_.end())
         serv_properties_[serv_path] = { };
 
     // 非阻塞版本
-    if(sec == 0) {
-        if( try_ephemeral_path_holder(lock_path, expect) ) {
+    if (sec == 0) {
+        if (try_ephemeral_path_holder(lock_path, expect)) {
             serv_distr_locks_[lock_path] = expect;
             return true;
         }
@@ -157,7 +157,7 @@ bool zkRecipe::service_try_lock(const std::string& dept, const std::string& serv
 #endif
     }
 
-    if( try_ephemeral_path_holder(lock_path, expect) ) {
+    if (try_ephemeral_path_holder(lock_path, expect)) {
         serv_distr_locks_[lock_path] = expect;
         return true;
     }
@@ -165,8 +165,9 @@ bool zkRecipe::service_try_lock(const std::string& dept, const std::string& serv
     return false;
 }
 
-bool zkRecipe::service_lock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect) {
-    
+bool zkRecipe::service_lock(const std::string& dept, const std::string& service, const std::string& lock_name,
+                            const std::string& expect) {
+
     std::string serv_path = zkPath::make_path(dept, service);
     std::string lock_path = zkPath::extend_property(serv_path, "lock_" + lock_name);
 
@@ -174,8 +175,8 @@ bool zkRecipe::service_lock(const std::string& dept, const std::string& service,
     serv_distr_locks_[lock_path] = "";
 
     auto iter = serv_properties_.find(serv_path);
-    if(iter == serv_properties_.end())
-        serv_properties_[serv_path] = {};
+    if (iter == serv_properties_.end())
+        serv_properties_[serv_path] = { };
 
 
     while (!try_ephemeral_path_holder(lock_path, expect)) {
@@ -187,30 +188,32 @@ bool zkRecipe::service_lock(const std::string& dept, const std::string& service,
 }
 
 
-bool zkRecipe::service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect) {
-    
+bool zkRecipe::service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name,
+                              const std::string& expect) {
+
     std::string serv_path = zkPath::make_path(dept, service);
     std::string lock_path = zkPath::extend_property(serv_path, "lock_" + lock_name);
 
     std::unique_lock<std::mutex> lock(serv_lock_);
 
     std::string value;
-    if(frame_.client_->zk_get(lock_path.c_str(), value, 1, NULL) != 0)
+    if (frame_.client_->zk_get(lock_path.c_str(), value, 1, NULL) != 0)
         return false;
 
     // we are the holder
-    if(value == expect) {
+    if (value == expect) {
         frame_.client_->zk_delete(lock_path.c_str());
         serv_distr_locks_.erase(lock_path);
         return true;
     }
 
     return false;
-} 
+}
 
 
 
-bool zkRecipe::service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect) {
+bool zkRecipe::service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name,
+                                  const std::string& expect) {
 
     std::string serv_path = zkPath::make_path(dept, service);
     std::string lock_path = zkPath::extend_property(serv_path, "lock_" + lock_name);
@@ -218,26 +221,26 @@ bool zkRecipe::service_lock_owner(const std::string& dept, const std::string& se
     std::unique_lock<std::mutex> lock(serv_lock_);
 
     std::string value;
-    if(frame_.client_->zk_get(lock_path.c_str(), value, 1, NULL) != 0)
+    if (frame_.client_->zk_get(lock_path.c_str(), value, 1, NULL) != 0)
         return false;
 
     // we are the holder
-    if(value == expect) {
+    if (value == expect) {
         serv_distr_locks_[lock_path] = expect;
         return true;
     }
 
     serv_distr_locks_[lock_path] = value;
-    return false; 
+    return false;
 }
 
 bool zkRecipe::try_ephemeral_path_holder(const std::string& path, const std::string& expect) {
 
-    if(frame_.client_->zk_create_if_nonexists(path.c_str(), expect, &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL ) != 0)
+    if (frame_.client_->zk_create_if_nonexists(path.c_str(), expect, &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL) != 0)
         return false;
 
     std::string value;
-    if(frame_.client_->zk_get(path.c_str(), value, 1, NULL) != 0)
+    if (frame_.client_->zk_get(path.c_str(), value, 1, NULL) != 0)
         return false;
 
     return value == expect;
@@ -248,13 +251,13 @@ void zkRecipe::revoke_all_locks(const std::string& expect) {
 
     std::unique_lock<std::mutex> lock(serv_lock_);
 
-    for(auto iter=serv_distr_locks_.begin(); iter != serv_distr_locks_.end(); ++iter) {
-        
+    for (auto iter = serv_distr_locks_.begin(); iter != serv_distr_locks_.end(); ++iter) {
+
         std::string value;
-        if(frame_.client_->zk_get(iter->first.c_str(), value, 1, NULL) != 0)
+        if (frame_.client_->zk_get(iter->first.c_str(), value, 1, NULL) != 0)
             continue;
 
-        if(value == expect)
+        if (value == expect)
             frame_.client_->zk_delete(iter->first.c_str());
     }
 

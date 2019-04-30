@@ -82,7 +82,7 @@ bool NodeType::prepare_path(VectorPair& paths) {
         }
 
         // 临时的保留节点名
-        if(iter->first == "active") {
+        if (iter->first == "active") {
             log_err("active is reserved, should not put in properties.");
             continue;
         }

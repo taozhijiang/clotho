@@ -83,7 +83,7 @@ public:
         std::string node = primary_node_addr_ + ":" + Clotho::to_string(port);
         return recipe_attach_node_property_cb(dept, service, node, func);
     }
-    int recipe_attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node, 
+    int recipe_attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node,
                                        const NodePropertyCall& func);
 
     int recipe_attach_serv_property_cb(const std::string& dept, const std::string& service, const ServPropertyCall& func);
@@ -94,8 +94,8 @@ public:
     // 永久阻塞，直到成功
     bool recipe_service_lock(const std::string& dept, const std::string& service, const std::string& lock_name);
     // 主动解锁
-    bool recipe_service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name); 
-    // 是否是锁的持有者   
+    bool recipe_service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name);
+    // 是否是锁的持有者
     bool recipe_service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name);
 
 
@@ -132,7 +132,7 @@ private:
     // 对于选主、分布式锁等应用，我们只根据primary_node_addr_节点信息进行操作
 
     // 这些信息在构造完成后就不会改变，可以当作不变式使用
-    
+
     const std::string idc_;
     std::string primary_node_addr_;
     std::vector<std::string> whole_nodes_addr_;

@@ -20,17 +20,17 @@ class zkFrame;
 
 typedef std::map<std::string, std::string> MapString;
 
-typedef std::function<int(const std::string& dept, const std::string& serv, const std::string& node, \
-                          const MapString& properties)> NodePropertyCall;
-typedef std::function<int(const std::string& dept, const std::string& serv, \
-                          const MapString& properties)> ServPropertyCall;
+typedef std::function<int(const std::string& dept, const std::string& serv, const std::string& node,\
+                              const MapString& properties)> NodePropertyCall;
+typedef std::function<int(const std::string& dept, const std::string& serv,\
+                              const MapString& properties)> ServPropertyCall;
 
 
 class zkRecipe {
 
 public:
-    explicit zkRecipe(zkFrame& frame):
-        frame_(frame) {}
+    explicit zkRecipe(zkFrame& frame) :
+        frame_(frame) { }
 
     ~zkRecipe() = default;
 
@@ -38,21 +38,25 @@ public:
     zkRecipe(const zkRecipe&) = delete;
     zkRecipe& operator=(const zkRecipe&) = delete;
 
-    
+
     // 注册制定路径的属性回调函数
     // 此处传入的路径只应该是服务节点，并且只有对应的服务被Watch了才有可能在属性变更的时候得到回调
     // 此处可能有点矛盾：即属性变更如果用作应用层的配置，那么应该是服务的发布节点
     //                   比较关注，但是sub应该是服务的消费节点比较关注的，所以如果
     //                   需要使用这个功能，那么服务的发布节点也需要sub服务才能实现对应功能
     int attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node,
-                                  const NodePropertyCall& func);
-    int attach_serv_property_cb(const std::string& dept, const std::string& service, 
-                                  const ServPropertyCall& func);
-                                  
-    bool service_try_lock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect, uint32_t sec);
-    bool service_lock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect);
-    bool service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect);
-    bool service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect);
+                                const NodePropertyCall& func);
+    int attach_serv_property_cb(const std::string& dept, const std::string& service,
+                                const ServPropertyCall& func);
+
+    bool service_try_lock(const std::string& dept, const std::string& service, const std::string& lock_name,
+                          const std::string& expect, uint32_t sec);
+    bool service_lock(const std::string& dept, const std::string& service, const std::string& lock_name,
+                      const std::string& expect);
+    bool service_unlock(const std::string& dept, const std::string& service, const std::string& lock_name,
+                        const std::string& expect);
+    bool service_lock_owner(const std::string& dept, const std::string& service, const std::string& lock_name,
+                            const std::string& expect);
 
     // 主动释放所有的分布式锁，加快其他节点抢占锁的时间
     void revoke_all_locks(const std::string& expect);
