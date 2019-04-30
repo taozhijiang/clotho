@@ -48,10 +48,13 @@ public:
 TEST_F(FrameClientTest, ClientPickNodeTest) {
 
     // watch service
-    ASSERT_THAT(client_->subscribe_service("dept", "srv_inst", 0), Eq(0));
+    ASSERT_THAT(client_->subscribe_service("dept", "srv_inst", 0, true), Eq(0));
 
     NodeType node_g{};
     ASSERT_THAT(client_->pick_service_node("dept", "srv_inst", node_g), Eq(0));
+
+    ASSERT_THAT(client_->revoke_all_nodes(), Eq(0));
+    ::sleep(1);
 }
 
 

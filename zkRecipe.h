@@ -17,9 +17,14 @@ namespace Clotho {
 
 class zkFrame;
 
-typedef std::function<int(const std::string& notify,\
-                          const std::map<std::string, std::string>& properties)> PropertyCall;
-typedef std::map<std::string, std::string> StrMap;
+
+typedef std::map<std::string, std::string> MapString;
+
+typedef std::function<int(const std::string& dept, const std::string& serv, const std::string& node, \
+                          const MapString& properties)> NodePropertyCall;
+typedef std::function<int(const std::string& dept, const std::string& serv, \
+                          const MapString& properties)> ServPropertyCall;
+
 
 class zkRecipe {
 
@@ -40,7 +45,9 @@ public:
     //                   比较关注，但是sub应该是服务的消费节点比较关注的，所以如果
     //                   需要使用这个功能，那么服务的发布节点也需要sub服务才能实现对应功能
     int attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node,
-                                  const PropertyCall& func);
+                                  const NodePropertyCall& func);
+    int attach_serv_property_cb(const std::string& dept, const std::string& service, 
+                                  const ServPropertyCall& func);
                                   
     bool service_try_lock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect, uint32_t sec);
     bool service_lock(const std::string& dept, const std::string& service, const std::string& lock_name, const std::string& expect);
@@ -51,24 +58,25 @@ public:
     void revoke_all_locks(const std::string& expect);
 
 
-    int hook_node_calls(const std::string& full, const std::map<std::string, std::string>& properties);
-    int hook_service_calls(const std::string& full, const std::map<std::string, std::string>& properties);
+    int hook_node_calls(const std::string& dept, const std::string& serv, const std::string& node, const MapString& properties);
+    int hook_service_calls(const std::string& dept, const std::string& serv, const MapString& properties);
 
 private:
 
     // 属性变更的回调列表
     std::mutex node_lock_;
-    std::map<std::string, PropertyCall> node_property_callmap_;
+    std::map<std::string, MapString>        node_properties_;
+    std::map<std::string, NodePropertyCall> node_property_callmap_;
+
 
     std::mutex serv_lock_;
     std::condition_variable serv_notify_;
 
-    // 目前没有用到这里的properties_，主要是用key做唯一性检查，防止不关心的
-    // 服务造成伪唤醒
-    std::map<std::string, std::map<std::string, std::string>> serv_properties_;
+    std::map<std::string, MapString>        serv_properties_;
+    std::map<std::string, ServPropertyCall> serv_property_callmap_;
 
     // 本地所注册的所有分布式锁实例
-    std::map<std::string, std::string> serv_distr_locks_;
+    std::map<std::string, std::string>      serv_distr_locks_;
 
     bool try_ephemeral_path_holder(const std::string& path, const std::string& expect);
 

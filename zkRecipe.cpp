@@ -10,7 +10,7 @@ namespace Clotho {
 // zkRecipe主要是由zkFrame中的调用转发过来的，zkFrame负责进行参数校验检查
 
 int zkRecipe::attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node,
-                                      const PropertyCall& func) {
+                                      const NodePropertyCall& func) {
 
     std::string path = zkPath::make_path(dept, service, node);
 
@@ -25,41 +25,89 @@ int zkRecipe::attach_node_property_cb(const std::string& dept, const std::string
     return -1;
 }
 
-int zkRecipe::hook_node_calls(const std::string& full, const std::map<std::string, std::string>& properties) {
-    
-    int code = 0;
-    PropertyCall func;
 
-    {
-        std::lock_guard<std::mutex> lock(node_lock_);
-        auto iter = node_property_callmap_.find(full);
-        if (iter != node_property_callmap_.end())
-            func = iter->second;
+int zkRecipe::attach_serv_property_cb(const std::string& dept, const std::string& service, 
+                                      const ServPropertyCall& func) {
+    std::string path = zkPath::make_path(dept, service);
+
+    std::lock_guard<std::mutex> lock(node_lock_);
+    path = zkPath::normalize_path(path);
+    PathType pt = zkPath::guess_path_type(path);
+    if (func && pt == PathType::kService) {
+        serv_property_callmap_[path] = func;
+        return 0;
     }
 
-    if (func)
-        code = func(full.c_str(), properties);
+    return -1;
+}
+
+int zkRecipe::hook_node_calls(const std::string& dept, const std::string& serv, const std::string& node, const MapString& properties) {
     
+    int code = 0;
+    NodePropertyCall func;
+    const std::string fullpath = zkPath::make_path(dept, serv, node);
+
+    do {
+
+        std::lock_guard<std::mutex> lock(node_lock_);
+        
+        // 首先检查properties是否真的修改了，因为周期性的检查机制，可能会导致该函数伪调用
+        auto iter_p = node_properties_.find(fullpath);
+        if(iter_p != node_properties_.end() && iter_p->second == properties)
+            break;
+
+        // 更新或者记录之
+        node_properties_[fullpath] = properties;
+
+        // 检查是否注册了用户回调函数
+        auto iter_c = node_property_callmap_.find(fullpath);
+        if (iter_c != node_property_callmap_.end())
+            func = iter_c->second;
+
+        if (func)
+            code = func(dept, serv, node, properties);
+
+    } while (0);
+
     return code;
 }
 
 
-int zkRecipe::hook_service_calls(const std::string& full, const std::map<std::string, std::string>& properties) {
+int zkRecipe::hook_service_calls(const std::string& dept, const std::string& serv, const MapString& properties) {
     
-    bool updated = false;
-    {
+    int code = 0;
+    const std::string fullpath = zkPath::make_path(dept, serv);
+    ServPropertyCall func;
+
+    do {
+
         std::lock_guard<std::mutex> lock(serv_lock_);
-        auto iter = serv_properties_.find(full);
-        if (iter != serv_properties_.end()) {
-            iter->second = properties;
-            updated = true;
+
+        // 首先检查properties是否真的修改了，因为周期性的检查机制，可能会导致该函数伪调用
+        auto iter_p = serv_properties_.find(fullpath);
+        if(iter_p != serv_properties_.end() && iter_p->second == properties)
+            break;
+
+        serv_properties_[fullpath] = properties;
+
+        auto iter_s = serv_property_callmap_.find(fullpath);
+        if (iter_s != serv_property_callmap_.end())
+            func = iter_s->second;
+
+        if (func)
+            code = func(dept, serv, properties);
+
+        // 看是否需要通知内部业务
+        for(auto iter = serv_distr_locks_.begin(); iter!=serv_distr_locks_.end(); ++iter) {
+            if(::strncmp(iter->first.c_str(), fullpath.c_str(), fullpath.size()) == 0) {
+                serv_notify_.notify_all();
+                break;
+            }
         }
-    }
 
-    if(updated)
-        serv_notify_.notify_all();
+    } while (0);
 
-    return 0;
+    return code;
 }
 
 
@@ -72,12 +120,21 @@ bool zkRecipe::service_try_lock(const std::string& dept, const std::string& serv
     // wait until sec ...
     std::unique_lock<std::mutex> lock(serv_lock_);
 
+    serv_distr_locks_[lock_path] = "";
+
     auto iter = serv_properties_.find(serv_path);
     if(iter == serv_properties_.end())
-        serv_properties_[serv_path] = std::map<std::string, std::string>();
+        serv_properties_[serv_path] = { };
 
-    if(sec == 0)
-        return try_ephemeral_path_holder(lock_path, expect);
+    // 非阻塞版本
+    if(sec == 0) {
+        if( try_ephemeral_path_holder(lock_path, expect) ) {
+            serv_distr_locks_[lock_path] = expect;
+            return true;
+        }
+
+        return false;
+    }
 
     auto now = std::chrono::system_clock::now();
     auto expire_tp = now + std::chrono::seconds(sec);
@@ -114,9 +171,11 @@ bool zkRecipe::service_lock(const std::string& dept, const std::string& service,
     std::string lock_path = zkPath::extend_property(serv_path, "lock_" + lock_name);
 
     std::unique_lock<std::mutex> lock(serv_lock_);
+    serv_distr_locks_[lock_path] = "";
+
     auto iter = serv_properties_.find(serv_path);
     if(iter == serv_properties_.end())
-        serv_properties_[serv_path] = std::map<std::string, std::string>();
+        serv_properties_[serv_path] = {};
 
 
     while (!try_ephemeral_path_holder(lock_path, expect)) {

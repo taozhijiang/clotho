@@ -63,7 +63,7 @@ public:
 
     // watch specific service
     int subscribe_service(const std::string& department, const std::string& service,
-                          uint32_t strategy);
+                          uint32_t strategy, bool with_nodes);
 
     // 特定的服务选择算法实现
     // 根据subscribe时候的策略进行选择
@@ -79,13 +79,14 @@ public:
     //                   比较关注，但是sub应该是服务的消费节点比较关注的，所以如果
     //                   需要使用这个功能，那么服务的发布节点也需要sub服务才能实现对应功能
     int recipe_attach_node_property_cb(const std::string& dept, const std::string& service, uint16_t port,
-                                         const PropertyCall& func) {
+                                       const NodePropertyCall& func) {
         std::string node = primary_node_addr_ + ":" + Clotho::to_string(port);
         return recipe_attach_node_property_cb(dept, service, node, func);
     }
-
     int recipe_attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node, 
-                                         const PropertyCall& func);
+                                       const NodePropertyCall& func);
+
+    int recipe_attach_serv_property_cb(const std::string& dept, const std::string& service, const ServPropertyCall& func);
 
     // sec <= 0, 不阻塞，立即返回结果
     // sec > 0, 阻塞的时间，以sec计数
@@ -115,12 +116,12 @@ private:
     //
     int substitute_node(const NodeType& node, std::vector<NodeType>& nodes);
 
-    int subscribe_node(NodeType& node);
+    int internal_subscribe_node(NodeType& node);
 
     // rewatch的时候调用
     // overwrite 用于控制是否覆盖本地的weight, priority设置
-    int subscribe_service(const std::string& department, const std::string& service);
-    int subscribe_node(const char* node_path);
+    int internal_subscribe_service(const std::string& department, const std::string& service);
+    int internal_subscribe_node(const char* node_path);
 
 private:
     std::unique_ptr<zkClient> client_;
@@ -149,10 +150,10 @@ private:
 
     int handle_zk_event(int type, int state, const char* path);
 
-    int do_handle_zk_service_event(int type, const char* service_path);
-    int do_handle_zk_service_properties_event(int type, const char* service_property_path);
-    int do_handle_zk_node_event(int type, const char* node_path);
-    int do_handle_zk_node_properties_event(int type, const char* node_property_path);
+    int internal_handle_zk_service_event(int type, const char* service_path);
+    int internal_handle_zk_service_properties_event(int type, const char* service_property_path);
+    int internal_handle_zk_node_event(int type, const char* node_path);
+    int internal_handle_zk_node_properties_event(int type, const char* node_property_path);
 };
 
 } // Clotho

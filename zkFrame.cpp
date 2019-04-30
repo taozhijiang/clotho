@@ -6,6 +6,8 @@
 
 namespace Clotho {
 
+// 用于关闭对zookeeper回调的处理。主要是在客户端退出的时候，会进行
+// 节点的解注册等操作，处理这些事件没有意义了，而且还可能导致死锁等问题
 static bool terminating = false;
 
 zkFrame::zkFrame(const std::string& idc) :
@@ -33,13 +35,11 @@ zkFrame::zkFrame(const std::string& idc) :
 zkFrame::~zkFrame() {
 
     terminating = true;
-    ::usleep(20);
 
-    std::lock_guard<std::mutex> lock(lock_);
-    
     std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
     recipe_->revoke_all_locks(expect);
 
+    std::lock_guard<std::mutex> lock(lock_);
     client_.reset();
 }
 
@@ -174,7 +174,7 @@ int zkFrame::revoke_all_nodes() {
 // subscribe_service should also subscribe its node instance
 // subscribe_service will update corresponding param and value with zk_get
 int zkFrame::subscribe_service(const std::string& department, const std::string& service,
-                               uint32_t strategy) {
+                               uint32_t strategy, bool with_nodes) {
 
     std::string service_path = zkPath::make_path(department, service);
     if (zkPath::guess_path_type(service_path) != PathType::kService) {
@@ -191,8 +191,10 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
         return -1;
     }
 
+    srv.properties_["enable"] = value;
     srv.enabled_ = (value == "1");
     srv.pick_strategy_ = strategy ? strategy : kStrategyDefault;
+    srv.with_nodes_ = with_nodes; 
 
     // 处理子节点
     std::vector<std::string> sub_path{};
@@ -212,6 +214,11 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
             else
                 srv.properties_[sub_path[i]] = value;
         } else if (tp == PathType::kNode) {
+
+            // 不需要处理子节点
+            if(!srv.with_nodes_)
+                continue;
+
             std::string department;
             std::string service;
             std::string node_p;
@@ -221,7 +228,7 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
             }
 
             NodeType node(department, service, node_p);
-            if (subscribe_node(node) != 0) {
+            if (internal_subscribe_node(node) != 0) {
                 log_err("subscribe node %s faild!", sub_node.c_str());
                 continue;
             }
@@ -246,21 +253,24 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
 }
 
 // 保留之前的subscribe的策略
-int zkFrame::subscribe_service(const std::string& department, const std::string& service) {
+int zkFrame::internal_subscribe_service(const std::string& department, const std::string& service) {
 
-    uint32_t strategy = kStrategyDefault;
+    uint32_t strategy   = kStrategyDefault;
+    bool     with_nodes = false;
 
     {
         std::lock_guard<std::mutex> lock(lock_);
         auto iter = sub_services_->find(zkPath::make_path(department, service));
-        if (iter != sub_services_->end())
+        if (iter != sub_services_->end()) {
             strategy = iter->second.pick_strategy_;
+            with_nodes = iter->second.with_nodes_;
+        }
     }
 
-    return subscribe_service(department, service, strategy);
+    return subscribe_service(department, service, strategy, with_nodes);
 }
 
-int zkFrame::subscribe_node(NodeType& node) {
+int zkFrame::internal_subscribe_node(NodeType& node) {
 
     std::string node_path = zkPath::make_path(node.department_, node.service_, node.node_);
     std::string value;
@@ -269,6 +279,8 @@ int zkFrame::subscribe_node(NodeType& node) {
         log_err("get node %s failed.", node_path.c_str());
         return -1;
     }
+
+    node.properties_["enable"] = value;
     node.enabled_ = (value == "1");
 
     if (!zkPath::validate_node(node.node_, node.host_, node.port_)) {
@@ -321,7 +333,7 @@ int zkFrame::subscribe_node(NodeType& node) {
 }
 
 
-int zkFrame::subscribe_node(const char* node_path) {
+int zkFrame::internal_subscribe_node(const char* node_path) {
 
     if (!node_path || strlen(node_path) == 0)
         return -1;
@@ -335,7 +347,7 @@ int zkFrame::subscribe_node(const char* node_path) {
     }
 
     NodeType node(department, service, node_p);
-    if (subscribe_node(node) != 0) {
+    if (internal_subscribe_node(node) != 0) {
         log_err("subscribe node %s faild!", node_path);
         return -1;
     }
@@ -513,7 +525,7 @@ int zkFrame::periodicly_care() {
         std::string depart;
         std::string service;
         if (ServiceType::service_parse(services[i].c_str(), depart, service))
-            subscribe_service(depart, service);
+            internal_subscribe_service(depart, service);
     }
 
     return 0;
@@ -556,7 +568,7 @@ int zkFrame::adj_weight(NodeType& node, int16_t step) {
 }
 
 int zkFrame::recipe_attach_node_property_cb(const std::string& dept, const std::string& service, const std::string& node, 
-                                            const PropertyCall& func) {
+                                            const NodePropertyCall& func) {
 
 
     if(dept.empty() || service.empty() || !zkPath::validate_node(node) || !func) {
@@ -565,13 +577,42 @@ int zkFrame::recipe_attach_node_property_cb(const std::string& dept, const std::
     }
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
-    int code = subscribe_service(dept, service);
+    int code = internal_subscribe_service(dept, service);
     if(code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
     }               
 
     return recipe_->attach_node_property_cb(dept, service, node, func);                         
+}
+
+int zkFrame::recipe_attach_serv_property_cb(const std::string& dept, const std::string& service, const ServPropertyCall& func) {
+
+
+    if(dept.empty() || service.empty() || !func) {
+        log_err("invalid node path params.");
+        return -1;
+    }
+
+    uint32_t strategy   = kStrategyDefault;
+
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        auto iter = sub_services_->find(zkPath::make_path(dept, service));
+        if (iter != sub_services_->end()) {
+            strategy = iter->second.pick_strategy_;
+        }
+    }
+
+
+    // 前提是先注册服务的监听，然后再调用recipe注册func
+    int code = subscribe_service(dept, service, strategy, true);
+    if(code != 0) {
+        log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
+        return code;
+    }               
+
+    return recipe_->attach_serv_property_cb(dept, service, func);                         
 }
 
 bool zkFrame::recipe_service_try_lock(const std::string& dept, const std::string& service, const std::string& lock_name, uint32_t sec) {
@@ -582,7 +623,7 @@ bool zkFrame::recipe_service_try_lock(const std::string& dept, const std::string
     }
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
-    int code = subscribe_service(dept, service);
+    int code = internal_subscribe_service(dept, service);
     if(code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
@@ -600,7 +641,7 @@ bool zkFrame::recipe_service_lock(const std::string& dept, const std::string& se
     }
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
-    int code = subscribe_service(dept, service);
+    int code = internal_subscribe_service(dept, service);
     if(code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
@@ -618,7 +659,7 @@ bool zkFrame::recipe_service_unlock(const std::string& dept, const std::string& 
     }
 
     // 前提是先注册服务的监听，然后再调用recipe注册func
-    int code = subscribe_service(dept, service);
+    int code = internal_subscribe_service(dept, service);
     if(code != 0) {
         log_err("subscribe service /%s/%s failed.", dept.c_str(), service.c_str());
         return code;
@@ -665,16 +706,16 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
     int code = 0;
     switch (tp) {
         case PathType::kService:
-            code = do_handle_zk_service_event(type, path);
+            code = internal_handle_zk_service_event(type, path);
             break;
         case PathType::kServiceProperty:
-            code = do_handle_zk_service_properties_event(type, path);
+            code = internal_handle_zk_service_properties_event(type, path);
             break;
         case PathType::kNode:
-            code = do_handle_zk_node_event(type, path);
+            code = internal_handle_zk_node_event(type, path);
             break;
         case PathType::kNodeProperty:
-            code = do_handle_zk_node_properties_event(type, path);
+            code = internal_handle_zk_node_properties_event(type, path);
             break;
 
         default:
@@ -715,12 +756,17 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
 
             if (!cb_serv_path.empty()) {
 
+                std::string dept;
+                std::string serv;
+                if (!ServiceType::service_parse(cb_serv_path.c_str(), dept, serv)) {
+                    break;
+                }
+
                 std::lock_guard<std::mutex> lock(lock_);
                 auto iter = sub_services_->find(cb_serv_path);
                 if (iter != sub_services_->end()) {
                     properties = iter->second.properties_;
-                    
-                    code = recipe_->hook_service_calls(cb_serv_path, properties);
+                    code = recipe_->hook_service_calls(dept, serv, properties);
                 }
 
             } else if (!cb_node_path.empty()) {
@@ -728,16 +774,18 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
                 std::string dept;
                 std::string serv;
                 std::string node;
-                if (NodeType::node_parse(cb_node_path.c_str(), dept, serv, node)) {
-                    std::lock_guard<std::mutex> lock(lock_);
-                    auto iter = sub_services_->find(base_path(cb_node_path));
-                    if (iter != sub_services_->end()) {
-                        auto node_p = iter->second.nodes_.find(node);
-                        if (node_p != iter->second.nodes_.end()) {
-                            properties = node_p->second.properties_;
+                if (!NodeType::node_parse(cb_node_path.c_str(), dept, serv, node)) {
+                    break;
+                }
 
-                            code = recipe_->hook_node_calls(cb_node_path, properties);
-                        }
+                std::lock_guard<std::mutex> lock(lock_);
+                auto iter = sub_services_->find(base_path(cb_node_path));
+                if (iter != sub_services_->end()) {
+                    auto node_p = iter->second.nodes_.find(node);
+                    if (node_p != iter->second.nodes_.end()) {
+                        properties = node_p->second.properties_;
+
+                        code = recipe_->hook_node_calls(dept, serv, node, properties);
                     }
                 }
 
@@ -760,7 +808,7 @@ int zkFrame::handle_zk_event(int type, int state, const char* path) {
 // ZOO_NOTWATCHING_EVENT watch移除事件，服务端出于某些原因不再为客户端watch节点时触发
 //
 
-int zkFrame::do_handle_zk_service_event(int type, const char* service_path) {
+int zkFrame::internal_handle_zk_service_event(int type, const char* service_path) {
 
     std::string department;
     std::string service;
@@ -772,7 +820,7 @@ int zkFrame::do_handle_zk_service_event(int type, const char* service_path) {
     if (type == ZOO_CREATED_EVENT) {
         // 服务重新上线，只需要再次监听就可以
         log_debug("re-sub_service %s", service_path);
-        return subscribe_service(department, service);
+        return internal_subscribe_service(department, service);
     } else if (type == ZOO_DELETED_EVENT) {
         // 正常情况不应该删除服务目录节点的，这里会从监听的服务列表中删除
         // 该服务的注册信息，然后使用exists监听等待服务再次注册
@@ -814,21 +862,21 @@ int zkFrame::do_handle_zk_service_event(int type, const char* service_path) {
         return code;
     } else if (type == ZOO_CHILD_EVENT) {
         // recevied when add/remove new properties or node
-        return subscribe_service(department, service);
+        return internal_subscribe_service(department, service);
     } else if (type == ZOO_SESSION_EVENT) {
         // Painic
         log_err("should not handle session_event in zkFrame here!");
         return -1;
     } else if (type == ZOO_NOTWATCHING_EVENT) {
         // rewatch this service
-        return subscribe_service(department, service);
+        return internal_subscribe_service(department, service);
     }
 
     log_err("unhandled event %s, path %s", zkClient::zevent_str(type), service_path);
     return -1;
 }
 
-int zkFrame::do_handle_zk_service_properties_event(int type, const char* service_property_path) {
+int zkFrame::internal_handle_zk_service_properties_event(int type, const char* service_property_path) {
 
     std::string department;
     std::string service;
@@ -877,14 +925,14 @@ int zkFrame::do_handle_zk_service_properties_event(int type, const char* service
         return -1;
     } else if (type == ZOO_NOTWATCHING_EVENT) {
         // rewatch this service
-        return subscribe_service(department, service);
+        return internal_subscribe_service(department, service);
     }
 
     log_err("unhandled event %s, path %s", zkClient::zevent_str(type), service_property_path);
     return -1;
 }
 
-int zkFrame::do_handle_zk_node_event(int type, const char* node_path) {
+int zkFrame::internal_handle_zk_node_event(int type, const char* node_path) {
 
     std::string department;
     std::string service;
@@ -933,21 +981,21 @@ int zkFrame::do_handle_zk_node_event(int type, const char* node_path) {
         return code;
     } else if (type == ZOO_CHILD_EVENT) {
         // When add/remove new properties for node
-        return subscribe_node(node_path);
+        return internal_subscribe_node(node_path);
     } else if (type == ZOO_SESSION_EVENT) {
         // Painic
         log_err("should not handle session_event in zkFrame here!");
         return -1;
     } else if (type == ZOO_NOTWATCHING_EVENT) {
         // rewatch this node
-        return subscribe_node(node_path);
+        return internal_subscribe_node(node_path);
     }
 
     log_err("unhandled event %s, path %s", zkClient::zevent_str(type), node_path);
     return -1;
 }
 
-int zkFrame::do_handle_zk_node_properties_event(int type, const char* node_property_path) {
+int zkFrame::internal_handle_zk_node_properties_event(int type, const char* node_property_path) {
 
     std::string department;
     std::string service;
@@ -1005,7 +1053,7 @@ int zkFrame::do_handle_zk_node_properties_event(int type, const char* node_prope
         return -1;
     } else if (type == ZOO_NOTWATCHING_EVENT) {
         // rewatch this service
-        return subscribe_node(zkPath::make_path(department, service, node).c_str());
+        return internal_subscribe_node(zkPath::make_path(department, service, node).c_str());
     }
 
     log_err("unhandled event %s, path %s", zkClient::zevent_str(type), node_property_path);

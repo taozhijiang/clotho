@@ -107,9 +107,11 @@ public:
     std::string department_;
     std::string service_;
 
-    bool        enabled_;   // 本地是否禁用
+    bool        enabled_;    // 本地是否禁用
 
-    uint32_t pick_strategy_;
+    uint32_t    pick_strategy_;
+    bool        with_nodes_; // 表示是否需要侦听nodes_节点信息，如果false则只关注properties
+
     std::map<std::string, NodeType> nodes_;
 
     std::map<std::string, std::string> properties_;

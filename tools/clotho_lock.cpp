@@ -24,14 +24,14 @@ int main(int argc, char* argv[]) {
         return -1;
     
     if(argc >= 3) {
-        if(!client_->recipe_service_try_lock("dept", "serv", "master", sec))
+        if(!client_->recipe_service_try_lock("dept", "srv_inst", "master", sec))
             return 1;
     } else {
-        if(!client_->recipe_service_lock("dept", "serv", "master"))
+        if(!client_->recipe_service_lock("dept", "srv_inst", "master"))
             return 1;
     }
     
-    if(client_->recipe_service_lock_owner("dept", "serv", "master"))
+    if(client_->recipe_service_lock_owner("dept", "srv_inst", "master"))
         std::cout << "request lock success!" << std::endl;
     else 
         std::cout << "request lock failed!" << std::endl;

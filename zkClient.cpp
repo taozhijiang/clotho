@@ -83,6 +83,7 @@ zkClient::zkClient(const std::string& hostline, const BizEventFunc& func,
 }
 
 zkClient::~zkClient() {
+
     std::lock_guard<std::mutex> lock(zhandle_lock_);
     if (zhandle_) {
         zookeeper_close(zhandle_);
@@ -90,7 +91,12 @@ zkClient::~zkClient() {
     }
 }
 
+
+// 如果连接异常，就会持有zhandle_lock_的互斥锁，那么上层对client的任何
+// 调用都会阻塞在此处
 int zkClient::handle_session_event(int type, int state, const char* path) {
+
+    std::lock_guard<std::mutex> lock(zhandle_lock_);
 
     if (state == ZOO_CONNECTING_STATE ||
         state == ZOO_ASSOCIATING_STATE) {
@@ -102,7 +108,8 @@ int zkClient::handle_session_event(int type, int state, const char* path) {
             if (zk_init() == 0)
                 break;
 
-            ::sleep(10);
+            log_err("try for ZooKeeper connecting...");
+            ::sleep(5);
         }
     }
     return 0;
