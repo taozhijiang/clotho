@@ -16,4 +16,6 @@ TEST(zkClientTest, ClientInitTest) {
     ASSERT_THAT(client_ok, Eq(true));
 
     ASSERT_THAT(client->zk_init(), Eq(true));
+
+    ::sleep(1);
 }

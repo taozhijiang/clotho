@@ -19,6 +19,10 @@ namespace Clotho {
 
 const static int ZOO_BUFFER_LEN = 4 * 1024;
 
+// 用于关闭对zookeeper回调的处理。主要是在客户端退出的时候，会进行
+// 节点的解注册等操作，处理这些事件没有意义了，而且还可能导致死锁等问题
+bool g_terminating_ = false;
+
 const char* zkClient::zevent_str(int event) {
 
     if (event == ZOO_CREATED_EVENT) {
@@ -129,6 +133,11 @@ zkClient_watch_call(zhandle_t* zh, int type, int state, const char* path, void* 
 
     log_debug("event type %s, state %s, path %s",
               zkClient::zevent_str(type), zkClient::zstate_str(state), path);
+
+    if (g_terminating_) {
+        log_debug("terminating, discard events...");
+        return;
+    }
 
     zkClient* zk = static_cast<zkClient*>(watcher_ctx);
     if (zk) {

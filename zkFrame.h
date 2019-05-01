@@ -25,10 +25,13 @@
 // 如果IDC筛选后节点为空了，就会忽略该参数
 #define kStrategyIdc        (0x1u<<0)
 
+// 只选择主节点，如果没有则失败返回
+#define kStrategyMaster     (0x1u<<1)
+
 // 下面三种选择算法是互斥的，按照该优先级处理
-#define kStrategyRandom     (0x1u<<2)
-#define kStrategyRoundRobin (0x1u<<3)
-#define kStrategyWP         (0x1u<<4)
+#define kStrategyRandom     (0x1u<<5)
+#define kStrategyRoundRobin (0x1u<<6)
+#define kStrategyWP         (0x1u<<7)
 
 #define kStrategyDefault    (kStrategyIdc | kStrategyWP)
 

@@ -6,10 +6,6 @@
 
 namespace Clotho {
 
-// 用于关闭对zookeeper回调的处理。主要是在客户端退出的时候，会进行
-// 节点的解注册等操作，处理这些事件没有意义了，而且还可能导致死锁等问题
-static bool terminating = false;
-
 zkFrame::zkFrame(const std::string& idc) :
     client_(),
     recipe_(),
@@ -32,9 +28,14 @@ zkFrame::zkFrame(const std::string& idc) :
     }
 }
 
+
+// defined at zkClient.cpp
+extern bool g_terminating_;
+
 zkFrame::~zkFrame() {
 
-    terminating = true;
+    // 不再响应任何事件通知的处理
+    g_terminating_ = true;
 
     std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
     recipe_->revoke_all_locks(expect);
@@ -108,18 +109,24 @@ int zkFrame::register_node(const NodeType& node, bool overwrite) {
             }
         }
 
-        // add additional active path
-        // EPHEMERAL node here
-        std::string active_path =
-            zkPath::extend_property(
-            zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_), "active");
+        std::string full_node_path = zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_);
 
+        // add additional active path, EPHEMERAL node here
+        std::string active_path = zkPath::extend_property(full_node_path, "active");
         if (client_->zk_create(active_path.c_str(), "1", &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL) != 0) {
             log_err("Create EPHEMERAL active failed, cirital error: %s", active_path.c_str());
             continue;
         }
 
+        // additional non-critial pid
+        std::string pid_path = zkPath::extend_property(full_node_path, "pid");
+        std::string pid_value = Clotho::to_string(::getpid());
+        if (client_->zk_create(pid_path.c_str(), pid_value, &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL) != 0) {
+            log_err("Create EPHEMERAL pid %s failed.", pid_path.c_str());
+        }
+
         {
+            // 执行添加操作
             std::string full = zkPath::make_path(nodes[i].department_, nodes[i].service_, nodes[i].node_);
             full = zkPath::normalize_path(full);
 
@@ -150,7 +157,9 @@ int zkFrame::revoke_node(const std::string& node_path) {
 
     std::string active_path = zkPath::extend_property(node_path, "active");
     client_->zk_delete(active_path.c_str());
-    client_->zk_set(node_path.c_str(), "0");
+
+    // 不需要将节点置为禁用状态，我们通过active也能控制节点是否被启用了
+    // client_->zk_set(node_path.c_str(), "0");
 
     return 0;
 }
@@ -424,7 +433,7 @@ int zkFrame::pick_service_node(const std::string& department, const std::string&
     std::vector<NodeType> before{};
     std::vector<NodeType> filtered{};
 
-    // Step1. 选取所有可用节点
+    // Step0. 选取所有可用节点
     for (auto iter = service_instance.nodes_.begin();
          iter != service_instance.nodes_.end();
          ++iter) {
@@ -436,6 +445,36 @@ int zkFrame::pick_service_node(const std::string& department, const std::string&
         log_err("not any available nodes for service %s with avaiable check.", service_path.c_str());
         return -1;
     }
+
+
+    // Step1. 如果有kStragetyMaster，则选择Master节点；失败就返回
+    if (strategy & kStrategyMaster) {
+        auto iter = service_instance.properties_.find("lock_master");
+        if (iter != service_instance.properties_.end()) {
+
+            std::string str_node_pid = iter->second;
+
+            // 设计原因，lock节点存储的是ip-pid的数据来标识锁的隶属的，我们无法保证存储节点信息，因为
+            // 非注册的节点也可以尝试获取分布式锁
+            // 这里根据每个节点properties的pid属性来进行尝试匹配
+            for (size_t i = 0; i < before.size(); ++i) {
+                if (before[i].properties_.find("pid") == before[i].properties_.end())
+                    continue;
+                std::string expect = before[i].host_ + "-" + before[i].properties_["pid"];
+                if (expect == str_node_pid) {
+                    node = before[i];
+                    return 0;
+                }
+            }
+
+            log_err("available master node %s not found", str_node_pid.c_str());
+            return -1;
+        }
+
+        log_err("lock_master not found for service /%s/%s", department.c_str(), service.c_str());
+        return -1;
+    }
+
 
     // Step2. 根据IDC进行候选解点的筛选
     filtered.clear();
@@ -631,6 +670,7 @@ bool zkFrame::recipe_service_try_lock(const std::string& dept, const std::string
         return code;
     }
 
+
     std::string expect = primary_node_addr_ + "-" + Clotho::to_string(::getpid());
     return recipe_->service_try_lock(dept, service, lock_name, expect, sec);
 }
@@ -693,9 +733,6 @@ static inline std::string base_path(const std::string& path) {
 }
 
 int zkFrame::handle_zk_event(int type, int state, const char* path) {
-
-    if (terminating)
-        return 0;
 
     assert(type != ZOO_SESSION_EVENT);
 
