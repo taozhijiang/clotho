@@ -1,5 +1,15 @@
+/*-
+ * Copyright (c) 2019 TAO Zhijiang<taozhijiang@gmail.com>
+ *
+ * Licensed under the BSD-3-Clause license, see LICENSE for full information.
+ *
+ */
+
 #include <vector>
 #include <thread>
+
+#include <unistd.h>
+
 #include <zookeeper/zookeeper.h>
 
 #include "zkPath.h"
@@ -113,7 +123,10 @@ int zkClient::handle_session_event(int type, int state, const char* path) {
                 break;
 
             log_err("try for ZooKeeper connecting...");
-            ::sleep(5);
+            int count = 5;
+            while (count != 0) {
+                ::sleep(count);
+            }
         }
     }
     return 0;
@@ -131,11 +144,11 @@ int zkClient::delegete_biz_event(int type, int state, const char* path) {
 static void
 zkClient_watch_call(zhandle_t* zh, int type, int state, const char* path, void* watcher_ctx) {
 
-    log_debug("event type %s, state %s, path %s",
+    log_info("event type %s, state %s, path %s",
               zkClient::zevent_str(type), zkClient::zstate_str(state), path);
 
     if (g_terminating_) {
-        log_debug("terminating, discard events...");
+        log_info("terminating, discard events...");
         return;
     }
 
@@ -175,7 +188,7 @@ bool zkClient::zk_init() {
 
         // 同步等待，直到连接完成
         while (zoo_state(zhandle_) != ZOO_CONNECTED_STATE) {
-            log_debug("wait zookeeper to be connectted. %d:%s", zoo_state(zhandle_), zstate_str(zoo_state(zhandle_)));
+            log_info("wait zookeeper to be connectted. %d:%s", zoo_state(zhandle_), zstate_str(zoo_state(zhandle_)));
             ::usleep(50 * 1000);
         }
     }
@@ -195,7 +208,7 @@ bool zkClient::zk_init() {
     }
 #endif
 
-    log_debug("zookeeper connect success.");
+    log_info("zookeeper connect success.");
     return true;
 }
 
@@ -211,7 +224,7 @@ int zkClient::zk_set(const char* path, const std::string& value, int version) {
         return ret;
     }
 
-    log_debug("zoo_set %s success. value: %s", path, value.c_str());
+    log_info("zoo_set %s success. value: %s", path, value.c_str());
     return 0;
 }
 
@@ -234,7 +247,7 @@ int zkClient::zk_get(const char* path, std::string& value, int watch, struct Sta
         szbuffer[ZOO_BUFFER_LEN - 1] = '\0';
     }
 
-    log_info("zoo_get %s success. value: %s, bufferlen: %d", path, szbuffer, buffer_len);
+    log_warning("zoo_get %s success. value: %s, bufferlen: %d", path, szbuffer, buffer_len);
     value = szbuffer;
     return 0;
 }
@@ -269,14 +282,14 @@ int zkClient::zk_create(const char* path, const std::string& value, const struct
     int ret = zoo_create(zhandle_, path, value.c_str(), value.size(), acl, flags, NULL, 0);
     if (ret < 0) {
         if (ret ==  ZNODEEXISTS) {
-            log_info("path %s already exists!", path);
+            log_warning("path %s already exists!", path);
         }
 
         log_err("zoo_create %s failed, ret: %s", path, zerror(ret));
         return ret;
     }
 
-    log_debug("zoo_create %s success, value: %s", path, value.c_str());
+    log_info("zoo_create %s success, value: %s", path, value.c_str());
     return 0;
 }
 
@@ -307,7 +320,7 @@ int zkClient::zk_delete(const char* path, int version) {
         return ret;
     }
 
-    log_debug("zoo_delete %s success.", path);
+    log_info("zoo_delete %s success.", path);
     return 0;
 }
 

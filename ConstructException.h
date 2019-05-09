@@ -1,13 +1,12 @@
 /*-
- * Copyright (c) 2018-2019 TAO Zhijiang<taozhijiang@gmail.com>
+ * Copyright (c) 2019 TAO Zhijiang<taozhijiang@gmail.com>
  *
  * Licensed under the BSD-3-Clause license, see LICENSE for full information.
  *
  */
 
-
-#ifndef __CONSTRUCT_EXCEPTION_H__
-#define __CONSTRUCT_EXCEPTION_H__
+#ifndef __CLOTHO_CONSTRUCT_EXCEPTION_H__
+#define __CLOTHO_CONSTRUCT_EXCEPTION_H__
 
 #include <exception>
 #include <cstring>
@@ -45,4 +44,4 @@ protected:
 
 } // end namespace Clotho
 
-#endif //__CONSTRUCT_EXCEPTION_H__
+#endif //__CLOTHO_CONSTRUCT_EXCEPTION_H__ss

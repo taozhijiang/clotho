@@ -1,3 +1,13 @@
+/*-
+ * Copyright (c) 2019 TAO Zhijiang<taozhijiang@gmail.com>
+ *
+ * Licensed under the BSD-3-Clause license, see LICENSE for full information.
+ *
+ */
+
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <cassert>
 #include <algorithm>
 #include <zookeeper/zookeeper.h>
@@ -133,7 +143,7 @@ int zkFrame::register_node(const NodeType& node, bool overwrite) {
             std::lock_guard<std::mutex> lock(lock_);
             (*pub_nodes_)[full] = nodes[i];
 
-            log_debug("successfully add %s into pub_nodes_", full.c_str());
+            log_info("successfully add %s into pub_nodes_", full.c_str());
         }
     }
 
@@ -242,7 +252,7 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
                 continue;
             }
 
-            log_debug("successfully detect and subscribe node %s", sub_node.c_str());
+            log_info("successfully detect and subscribe node %s", sub_node.c_str());
             srv.nodes_[node_p] = node;
         } else {
             // 其他类型节点？
@@ -254,7 +264,7 @@ int zkFrame::subscribe_service(const std::string& department, const std::string&
         // 将监听的服务登记到本地的sub_services_中去
         std::lock_guard<std::mutex> lock(lock_);
 
-        log_debug("successfully add/update service %s", service_path.c_str());
+        log_info("successfully add/update service %s", service_path.c_str());
         (*sub_services_)[service_path] = srv;
     }
 
@@ -361,7 +371,7 @@ int zkFrame::internal_subscribe_node(const char* node_path) {
         return -1;
     }
 
-    log_debug("successfully detected node %s", node_path);
+    log_info("successfully detected node %s", node_path);
 
     {
         std::lock_guard<std::mutex> lock(lock_);
@@ -369,7 +379,7 @@ int zkFrame::internal_subscribe_node(const char* node_path) {
         auto iter = sub_services_->find(service_path);
         if (iter != sub_services_->end()) {
             iter->second.nodes_[node_p] = node;
-            log_debug("node %s register successfully.", node_path);
+            log_info("node %s register successfully.", node_path);
         } else {
             log_err("service %s not found, not subsubscribed??", service.c_str());
             return -1;
@@ -492,7 +502,7 @@ int zkFrame::pick_service_node(const std::string& department, const std::string&
 
         // 如果IDC筛选后可用节点为空，则取消IDC筛选条件
         if (filtered.empty()) {
-            log_info("filtered by kStrategyIdc remains empty nodes, reset IDC strict.");
+            log_warning("filtered by kStrategyIdc remains empty nodes, reset IDC strict.");
         } else {
             before = filtered;
         }
@@ -502,7 +512,7 @@ int zkFrame::pick_service_node(const std::string& department, const std::string&
     if (strategy & kStrategyRandom) {
         uint32_t rands = static_cast<uint32_t>(::random());
         node = before[rands % before.size()];
-        log_debug("by kStrategyRandom, return %s",
+        log_info("by kStrategyRandom, return %s",
                   zkPath::make_path(node.department_, node.service_, node.node_).c_str());
         return 0;
     }
@@ -512,7 +522,7 @@ int zkFrame::pick_service_node(const std::string& department, const std::string&
         if (++CHOOSE_INDEX > 0xFFFF)
             CHOOSE_INDEX = 0;
         node = before[CHOOSE_INDEX % before.size()];
-        log_debug("by kStrategyRoundRoubin, return %s",
+        log_info("by kStrategyRoundRoubin, return %s",
                   zkPath::make_path(node.department_, node.service_, node.node_).c_str());
         return 0;
     }
@@ -539,7 +549,7 @@ int zkFrame::pick_service_node(const std::string& department, const std::string&
     for (size_t i = 0; i < weight_ladder.size(); ++i) {
         if (rand_w <= weight_ladder[i]) {
             node = before[i];
-            log_debug("filter by priority and weight, return %s",
+            log_info("filter by priority and weight, return %s",
                       zkPath::make_path(node.department_, node.service_, node.node_).c_str());
             return 0;
         }
@@ -868,7 +878,7 @@ int zkFrame::internal_handle_zk_service_event(int type, const char* service_path
 
     if (type == ZOO_CREATED_EVENT) {
         // 服务重新上线，只需要再次监听就可以
-        log_debug("re-sub_service %s", service_path);
+        log_info("re-sub_service %s", service_path);
         return internal_subscribe_service(department, service);
     } else if (type == ZOO_DELETED_EVENT) {
         // 正常情况不应该删除服务目录节点的，这里会从监听的服务列表中删除
@@ -879,7 +889,7 @@ int zkFrame::internal_handle_zk_service_event(int type, const char* service_path
             std::lock_guard<std::mutex> lock(lock_);
             auto iter = sub_services_->find(service_path);
             if (iter != sub_services_->end()) {
-                log_info("delete service %s from subscribed list.", service_path);
+                log_warning("delete service %s from subscribed list.", service_path);
                 sub_services_->erase(service_path);
             } else {
                 log_err("service %s not subscribed ??", service_path);
